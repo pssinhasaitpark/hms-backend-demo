@@ -1,0 +1,30 @@
+{
+  "name": "hms-backend",
+  "version": "1.0.0",
+  "description": "RESTful API backend for the Hospital Management System. Handles authentication, patient records, doctor schedules, billing, and data management using secure and scalable architecture.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed:admin": "node app/seed/seedAdmin.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "joi": "^18.0.1",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.2",
+    "moment": "^2.30.1",
+    "mongoose": "^9.0.1",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "sharp": "^0.34.5"
+  }
+}

@@ -23,6 +23,7 @@ app.use(
       "http://192.168.0.141:5174",
       "http://192.168.0.162:5173",
       "http://192.168.0.146:5173",
+      "https://hms-admin-demo.vercel.app/",
       "http://localhost:5173",
       "http://localhost:5174",
       "http://192.168.0.139:5173",

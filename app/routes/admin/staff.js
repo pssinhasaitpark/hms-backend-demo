@@ -9,7 +9,9 @@ import {
   updateStaff,
   registerStaff,
 } from "../../controllers/admin/user/staff.js";
-import { adminLogin, loginUser } from "../../controllers/user/userAuth.js";
+import {
+  adminLogin,
+} from "../../controllers/user/userAuth.js";
 
 const router = express.Router();
 
@@ -23,6 +25,7 @@ router.post(
   registerStaff
 );
 router.post("/auth/login", adminLogin);
+
 router.get(staffBase, getAllStaff);
 router.get(`${staffBase}/:id`, getStaffById);
 router.put(`${staffBase}/:id`, updateStaff);

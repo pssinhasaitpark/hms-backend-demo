@@ -1,47 +1,6 @@
 import registrationFees from "../../../models/base/registrationFees.js";
 import { handleResponse } from "../../../utils/responseHandler.js";
 
-// export const createOrUpdateRegistrationFee = async (req, res) => {
-//   try {
-//     const { registrationFee } = req.body;
-//     const updatedBy = req.user?._id;
-//     console.log("req.body===", req.body);
-//     console.log("updatedBy", updatedBy);
-
-//     let feeDoc = await registrationFees.findOne({});
-
-//     if (feeDoc) {
-//       feeDoc.registrationFee = registrationFee;
-//       feeDoc.updatedBy = updatedBy;
-//       await feeDoc.save();
-
-//       return handleResponse(
-//         res,
-//         200,
-//         "Registration fee updated successfully",
-//         feeDoc
-//       );
-//     } else {
-//       feeDoc = await registrationFees.create({
-//         registrationFee,
-//         updatedBy,
-//       });
-
-//       return handleResponse(
-//         res,
-//         201,
-//         "Registration fee created successfully",
-//         feeDoc
-//       );
-//     }
-//   } catch (error) {
-//     console.log("req.body===", req.body);
-//     console.log("updatedBy", updatedBy);
-//     return handleResponse(res, 500, "Internal Server error.");
-//   }
-// };
-
-// 12 Dec 2025
 export const createOrUpdateRegistrationFee = async (req, res) => {
   try {
     const { registrationFee } = req.body;

@@ -59,7 +59,7 @@ export const registerStaff = async (req, res) => {
         }
       }
 
-      // Validate doctors
+    
       if (doctors.length > 0) {
         const validDoctors = await Doctor.find({
           _id: { $in: doctors },
@@ -146,69 +146,7 @@ export const registerStaff = async (req, res) => {
   }
 };
 
-// old
-// export const getAllStaff = async (req, res) => {
-//   try {
-//     const { page, limit, skip } = getPagination(req);
-//     const { search } = req.query; 
 
-
-//     const queryStaff = { status: { $ne: "deleted" } };
-//     const queryCompounder = { status: { $ne: "deleted" } };
-
-//     if (search) {
-     
-//       queryStaff.name = { $regex: search, $options: "i" }; 
-//       queryCompounder.name = { $regex: search, $options: "i" };
-//     }
-
- 
-//     const staffList = await Staff.find(queryStaff)
-//       .populate("role", "name description")
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(limit)
-//       .lean();
-
-//     const filteredStaffList = staffList.filter(
-//       (staff) => staff.role.name !== "ADMIN"
-//     );
-
-//     const compounderList = await Compounder.find(queryCompounder)
-//       .populate("role", "name description")
-//       .populate("doctors", "doctorName doctorId")
-//       .populate("departments", "name departmentId")
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(limit)
-//       .lean();
-
-   
-//     const combinedList = [...filteredStaffList, ...compounderList];
-
-//     const totalStaff = await Staff.countDocuments(queryStaff);
-//     const totalCompounders = await Compounder.countDocuments(queryCompounder);
-//     const totalItems = totalStaff + totalCompounders;
-
-//     return handleResponse(
-//       res,
-//       200,
-//       "Staff and compounders fetched successfully",
-//       {
-//         staff: combinedList,
-//         page,
-//         limit,
-//         totalPages: Math.ceil(totalItems / limit),
-//         totalItems,
-//       }
-//     );
-//   } catch (error) {
-//     console.error("❌ Get all staff error:", error);
-//     return handleResponse(res, 500, "Server error", { error: error.message });
-//   }
-// };
-
-// 12 dec 2025
 export const getAllStaff = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
@@ -287,44 +225,6 @@ export const getStaffById = async (req, res) => {
   }
 };
 
-/* export const updateStaff = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!validateObjectId(id, res, "staff ID")) return;
-
-    const { name, phone, password, monthlySalary, roleId, weekOffDay } =
-      req.body || {};
-
-    const staff = await Staff.findOne({ _id: id, status: { $ne: "deleted" } });
-    if (!staff) return handleResponse(res, 404, "Staff not found");
-
-    if (phone) {
-      const existing = await Staff.findOne({ _id: { $ne: id }, phone });
-      if (existing)
-        return handleResponse(res, 400, "Phone number already in use");
-    }
-
-    if (name) staff.name = name;
-    if (phone) staff.phone = phone;
-    if (password) staff.password = password;
-    if (monthlySalary !== undefined) staff.monthlySalary = monthlySalary;
-    if (weekOffDay) staff.weekOffDay = weekOffDay;
-
-    if (roleId) {
-      const role = await Role.findById(roleId);
-      if (!role) return handleResponse(res, 404, "Role not found");
-      staff.role = role._id;
-    }
-
-    await staff.save();
-    const { password: _, ...staffData } = staff.toObject();
-
-    return handleResponse(res, 200, "Staff updated successfully", staffData);
-  } catch (error) {
-    console.error("❌ Update staff error:", error);
-    return handleResponse(res, 500, "Server error", { error: error.message });
-  }
-}; */
 
 export const updateStaff = async (req, res) => {
   try {

@@ -8,27 +8,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/* const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "../uploads/images");
 
-    fs.promises
-      .mkdir(uploadDir, { recursive: true })
-      .then(() => cb(null, uploadDir))
-      .catch((err) => {
-        console.error("Directory creation error:", err);
-        cb(new Error("Failed to create directory"), false);
-      });
-  },
-
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const fileExtension = path.extname(file.originalname);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${fileExtension}`);
-  },
-}); */
-
-/* -------------------- Multer Storage -------------------- */
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     try {
@@ -55,7 +35,7 @@ const storage = multer.diskStorage({
   },
 });
 
-/* -------------------- Multer Upload -------------------- */
+
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
@@ -69,40 +49,6 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB max
   },
 });
-
-/* old 
-const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files are allowed!'), false);  
-    }
-    cb(null, true); 
-  },
-  limits: {
-    fileSize: 5 * 1024 * 1024, 
-  },
-}); */
-
-/* const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    // images ya PDFs allow kar do
-    if (
-      file.mimetype.startsWith("image/") ||
-      file.mimetype === "application/pdf"
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only images and PDFs are allowed!"), false);
-    }
-  },
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max
-  },
-});
- */
-
 
 
 export const uploadAndConvertImage = (fieldName) => [
@@ -152,46 +98,6 @@ export const uploadAndConvertImage = (fieldName) => [
   },
 ];
 
-/* export const uploadAndConvertImage = (fieldName) => [
-  upload.array(fieldName, 10), 
-  async (req, res, next) => {
-    if (!req.files) return next();  
-
-    try {
-      const convertedFileUrls = [];  
-
-   
-      for (const file of req.files) {
-        const uploadedFilePath = path.join(__dirname, '../uploads/images', file.filename); 
-
-        const buffer = await sharp(uploadedFilePath)
-          .resize(800) 
-          .webp({ quality: 80 }) 
-          .toBuffer();  
-
-        const webpFileName = `${file.filename.split('.')[0]}.webp`;
-        const webpFilePath = path.join(__dirname, '../uploads/images', webpFileName);
-
-
-        await fs.promises.writeFile(webpFilePath, buffer);
-
-    
-        fs.unlinkSync(uploadedFilePath);
-
-        const fileUrl = `/media/images/${webpFileName}`; 
-        convertedFileUrls.push(fileUrl);  
-      }
-
- 
-      req.convertedFiles = convertedFileUrls;
-
-      next(); 
-    } catch (err) {
-      console.error('Error processing images:', err);
-      return handleResponse(res, 500, 'Failed to upload and convert images');
-    }
-  },
-]; */
 
 export const uploadGuestFiles = (fieldName) => [
   upload.array(fieldName, 10),

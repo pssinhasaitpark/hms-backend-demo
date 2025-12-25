@@ -3,53 +3,6 @@ import { handleResponse } from "../../utils/responseHandler.js";
 import PatientVisitRecords from "../../models/frontdesk/patientVisitRecords.js";
 import mongoose from "mongoose";
 
-/* export const createPrescription = async (req, res) => {
-  try {
-    const { patient, prescriptionNotes } = req.body || {};
-
-    if (!req.user) {
-      return handleResponse(res, 401, "You must be logged in as a compounder!");
-    }
-
-    const compounderId = req.user._id;
-
-    if (!patient) {
-      return handleResponse(res, 400, "Patient is required!");
-    }
-
-    let prescriptionFiles = [];
-
-    if (Array.isArray(req.convertedFiles)) {
-      prescriptionFiles = req.convertedFiles;
-    } else if (req.convertedFiles && req.convertedFiles.images) {
-      prescriptionFiles = req.convertedFiles.images;
-    }
-
-    if (req.convertedFiles && req.convertedFiles.audio_section_audio) {
-      prescriptionFiles = [
-        ...prescriptionFiles,
-        ...req.convertedFiles.audio_section_audio,
-      ];
-    }
-
-    const prescription = new Prescription({
-      compounder: compounderId,
-      patient,
-      prescriptionNotes,
-      prescriptionFile: prescriptionFiles.length > 0 ? prescriptionFiles : null,
-      createdBy: req.user._id,
-    });
-
-    await prescription.save();
-
-    return handleResponse(res, 201, "Prescription created successfully!", {
-      prescription,
-    });
-  } catch (error) {
-    console.error(error);
-    return handleResponse(res, 500, "Error creating prescription");
-  }
-}; */
 
 export const createPrescription = async (req, res) => {
   try {

@@ -3,6 +3,7 @@ import staffAuthPublicRoutes from "../routes/user/staff.js";
 import frontdeskRoutes from "../routes/frontdesk/patientsManagement.js";
 import guestDetailsRoutes from "../routes/guest/guestDetails.js";
 import tokenTemplateRoutes from "../routes/guest/tokenTemplate.js";
+
 //admin routes
 import opdRegistrationFeeRoutes from "../routes/admin/opdRegistrationFee.js";
 import registrationFeeRoutes from "../routes/admin/registrationFees.js";
@@ -15,7 +16,7 @@ import adminPatienRoutes from "../routes/admin/patient.js";
 import adminCompounderRoutes from "../routes/admin/compounder.js";
 import adminGuestRoomRoutes from "../routes/guest/guestRoom.js";
 import packageRoutes from "../routes/admin/package.js";
-import exportRoutes from "../routes/exporter/exporter.js"
+import exportRoutes from "../routes/exporter/exporter.js";
 //compounder
 import compounderDoctorManagementRoutes from "../routes/compounder/doctorandpatientManagement.js";
 import prescriptionRoutes from "../routes/compounder/prescription.js";
@@ -24,6 +25,10 @@ import prescriptionRoutes from "../routes/compounder/prescription.js";
 import accountDailySummaryRoutes from "../routes/accounts/accountDailySummary.js";
 
 import reportsRoutes from "../routes/reports/reports.js";
+
+//super-admin routes
+import superAdminAuthRoutes from "../routes/super-admin/auth.js";
+import hospitalRoutes from "../routes/hospitals/hospitals.js";
 
 export default (app) => {
   app.use("/api/v1/auth", staffAuthPublicRoutes);
@@ -58,4 +63,7 @@ export default (app) => {
 
   app.use("/api/v1/admin/export", exportRoutes);
 
+  //super admin routes
+  app.use("/api/v1/super-admin/auth", superAdminAuthRoutes);
+  app.use("/api/v1/hospital", hospitalRoutes);
 };

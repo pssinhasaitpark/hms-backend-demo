@@ -6,42 +6,7 @@ import Department from "../../../models/departments/deparments.js";
 import { updateStatus } from "../../../utils/updateStatus.js";
 import Doctor from "../../../models/user/doctor.js";
 import DoctorService from "../../../models/departments/doctorServices.js";
-/* export const createService = async (req, res) => {
-  try {
-    const { name, description, department, charge } = req.body || {};
 
-    if (charge === undefined || charge < 0) {
-      return handleResponse(res, 400, "Charge is required and must be >= 0");
-    }
-
-    const deptExists = await Department.findById(department);
-    if (!deptExists) return handleResponse(res, 404, "Department not found");
-
-    const existing = await Service.findOne({ name: name.trim(), department });
-    if (existing) {
-      return handleResponse(
-        res,
-        400,
-        `Service with the name '${name}' already exists in this department`
-      );
-    }
-
-    const service = await Service.create({
-      name: name.trim(),
-      description,
-      department,
-      charge,
-      createdBy: req.user?._id || null,
-    });
-
-    return handleResponse(res, 201, "Service created successfully", {
-      service,
-    });
-  } catch (error) {
-    console.error("❌ Service creation error:", error);
-    return handleResponse(res, 500, "Server error", { error: error.message });
-  }
-}; */
 
 export const createService = async (req, res) => {
   try {
@@ -232,38 +197,6 @@ export const updateService = async (req, res) => {
   }
 };
 
-/* export const deleteService = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!validateObjectId(id, res, "service ID")) return;
-
-    const service = await Service.findById(id)
-      .populate("department", "_id name")
-      .populate("createdBy");
-
-    if (!service || service.status === "deleted") {
-      return handleResponse(res, 404, "Service not found");
-    }
-
-    service.status = "deleted";
-    await service.save();
-
-    const serviceObj = service.toObject();
-    if (serviceObj.createdBy) {
-      serviceObj.createdBy = {
-        _id: serviceObj.createdBy._id,
-        name: `${serviceObj.createdBy.firstName} ${serviceObj.createdBy.lastName}`,
-      };
-    }
-
-    return handleResponse(res, 200, "Service deleted successfully", {
-      service: serviceObj,
-    });
-  } catch (error) {
-    console.error("❌ Delete service error:", error);
-    return handleResponse(res, 500, "Server error", { error: error.message });
-  }
-}; */
 
 export const deleteService = async (req, res) => {
   try {

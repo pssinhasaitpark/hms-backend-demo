@@ -4,41 +4,6 @@ import { handleResponse } from "../../utils/responseHandler.js";
 import IssuedToken from "../../models/guest/tokenIssues.js";
 import { updateAccountDailySummary } from "../../utils/accountDailySummary.js";
 
-// export const createTokenTemplate = async (req, res) => {
-//   try {
-//     const { mealType, amount } = req.body;
-
-//     if (!mealType || !amount) {
-//       return handleResponse(res, 400, "Meal Type and Amount are required.");
-//     }
-
-//     const today = new Date().toISOString().split("T")[0];
-
-//     // const finalRemarks =
-//     //   remarks && remarks.trim() !== ""
-//     //     ? remarks
-//     //     : `Token is valid for ${today}`;
-
-//     const tokenTemplate = new TokenTemplate({
-//       mealType,
-//       amount,
-//       // remarks: finalRemarks,
-//       createdBy: req.user._id,
-//     });
-
-//     await tokenTemplate.save();
-
-//     return handleResponse(
-//       res,
-//       201,
-//       "Token Template created successfully",
-//       tokenTemplate
-//     );
-//   } catch (error) {
-//     console.error(error);
-//     return handleResponse(res, 500, "Internal server error");
-//   }
-// };
 
 function timeStringToMinutes(timeStr) {
   const [time, modifier] = timeStr.split(" ");
@@ -85,39 +50,6 @@ export const createTokenTemplate = async (req, res) => {
   }
 };
 
-/* export const createTokenTemplate = async (req, res) => {
-  try {
-    const { mealType, amount, validFrom, validTo } = req.body;
-
-    if (!mealType || !amount || !validFrom || !validTo) {
-      return handleResponse(
-        res,
-        400,
-        "Meal Type, Amount, ValidFrom and ValidTo are required."
-      );
-    }
-
-    const tokenTemplate = new TokenTemplate({
-      mealType,
-      amount,
-      validFrom,
-      validTo,
-      createdBy: req.user._id,
-    });
-
-    await tokenTemplate.save();
-
-    return handleResponse(
-      res,
-      201,
-      "Token Template created successfully",
-      tokenTemplate
-    );
-  } catch (error) {
-    console.error(error);
-    return handleResponse(res, 500, "Internal server error");
-  }
-}; */
 
 export const getTokenTemplates = async (req, res) => {
   try {
@@ -177,37 +109,6 @@ export const getTokenTemplateById = async (req, res) => {
   }
 };
 
-/* export const updateTokenTemplate = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { mealType, amount } = req.body;
-
-    if (!mealType || !amount) {
-      return handleResponse(res, 400, "Meal Type, Amount are required.");
-    }
-
-    const updatedTokenTemplate = await TokenTemplate.findByIdAndUpdate(
-      id,
-      { mealType, amount },
-      { new: true }
-    );
-
-    if (!updatedTokenTemplate) {
-      return handleResponse(res, 404, "Token Template not found.");
-    }
-
-    return handleResponse(
-      res,
-      200,
-      "Token Template updated successfully",
-      updatedTokenTemplate
-    );
-  } catch (error) {
-    console.error(error);
-    return handleResponse(res, 500, "Server error, please try again.");
-  }
-};
- */
 
 export const updateTokenTemplate = async (req, res) => {
   try {
@@ -274,71 +175,6 @@ export const deleteTokenTemplate = async (req, res) => {
     return handleResponse(res, 500, "Server error, please try again.");
   }
 };
-
-/* export const issueToken = async (req, res) => {
-  try {
-    const { template, quantity, paymentType } = req.body;
-
-    if (!template || !quantity || !paymentType) {
-      return handleResponse(
-        res,
-        400,
-        "Template, quantity, paymentType,  are required"
-      );
-    }
-
-    if (!["cash", "online"].includes(paymentType)) {
-      return handleResponse(res, 400, "paymentType must be 'cash' or 'online'");
-    }
-
-    const tokenTemplate = await TokenTemplate.findById(template);
-    if (!tokenTemplate) {
-      return handleResponse(res, 404, "TokenTemplate not found");
-    }
-
-    const unitPrice = tokenTemplate.amount;
-    const totalAmount = unitPrice * quantity;
-
-    // await updateAccountDailySummary(
-    //   req.user._id,
-    //   paymentType === "cash" ? totalAmount : 0,
-    //   paymentType === "online" ? totalAmount : 0,
-    //   0
-    // );
-    await updateAccountDailySummary(
-      req.user._id,
-      0,
-      0,
-      0,
-      0,
-      paymentType === "cash" ? totalAmount : 0,
-      paymentType === "online" ? totalAmount : 0
-    );
-
-    const newIssuedToken = new IssuedToken({
-      template: tokenTemplate._id,
-      quantity,
-      unitPrice,
-      totalAmount,
-      mealType: tokenTemplate.mealType,
-      paymentType,
-      createdBy: req.user._id,
-    });
-
-    await newIssuedToken.save();
-
-    return handleResponse(
-      res,
-      201,
-      "Token issued successfully",
-      newIssuedToken
-    );
-  } catch (error) {
-    console.error(error);
-    return handleResponse(res, 500, "Server error");
-  }
-}; */
-
 
 export const issueToken = async (req, res) => {
   try {
@@ -414,77 +250,6 @@ export const issueToken = async (req, res) => {
   }
 };
 
-
-/* export const issueToken = async (req, res) => {
-  try {
-    const { template, quantity, paymentType, remarks } = req.body;
-
-    if (!template || !quantity || !paymentType) {
-      return handleResponse(
-        res,
-        400,
-        "Template, quantity, and paymentType are required"
-      );
-    }
-
-    if (!["cash", "online"].includes(paymentType)) {
-      return handleResponse(res, 400, "paymentType must be 'cash' or 'online'");
-    }
-
-    const tokenTemplate = await TokenTemplate.findById(template);
-    if (!tokenTemplate) {
-      return handleResponse(res, 404, "TokenTemplate not found");
-    }
-
-    const unitPrice = tokenTemplate.amount;
-    const totalAmount = unitPrice * quantity;
-
-    await updateAccountDailySummary(
-      req.user._id,
-      0,
-      0,
-      0,
-      0,
-      paymentType === "cash" ? totalAmount : 0,
-      paymentType === "online" ? totalAmount : 0
-    );
-
-    const today = new Date();
-    const formattedDate = `${today.getDate().toString().padStart(2, "0")}-${(
-      today.getMonth() + 1
-    )
-      .toString()
-      .padStart(2, "0")}-${today.getFullYear()}`;
-
-    const finalRemarks =
-      remarks && remarks.trim() !== ""
-        ? remarks
-        : `Valid for ${formattedDate} only.`;
-
-    const newIssuedToken = new IssuedToken({
-      template: tokenTemplate._id,
-      quantity,
-      unitPrice,
-      totalAmount,
-      mealType: tokenTemplate.mealType,
-      paymentType,
-      remarks: finalRemarks,
-      createdBy: req.user._id,
-    });
-
-    await newIssuedToken.save();
-
-    return handleResponse(
-      res,
-      201,
-      "Token issued successfully",
-      newIssuedToken
-    );
-  } catch (error) {
-    console.error(error);
-    return handleResponse(res, 500, "Server error");
-  }
-}; */
 
 export const getAllIssuedTokens = async (req, res) => {
   try {

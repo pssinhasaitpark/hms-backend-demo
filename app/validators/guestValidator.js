@@ -1,5 +1,4 @@
 import Joi from "joi";
-import mongoose from "mongoose";
 
 export const guestSchemaValidator = Joi.object({
   name: Joi.string().trim().required().messages({

@@ -3,6 +3,8 @@ import Staff from "../models/user/staff.js";
 import { handleResponse } from "../utils/responseHandler.js";
 import Doctor from "../models/user/doctor.js";
 import Compounder from "../models/user/compounder.js";
+import Admin from "../models/user/admin.js";
+
 
 export const generateToken = (
   staffId,
@@ -16,46 +18,15 @@ export const generateToken = (
   );
 };
 
-/* export const verifyToken = async (req, res, next) => {
-  try {
-    let token = req.headers.authorization?.split(" ")[1] || req.query.token;
-
-    if (!token) return res.status(401).json({ message: "No token provided" });
-
-    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-
-    const user = await Staff.findById(decoded.id)
-      .select("-password")
-      .populate("role", "name");
-
-    if (!user) return res.status(401).json({ message: "Invalid token" });
-
-    req.user = {
-      ...user.toObject(),
-      role: user.role.name,
-    };
-
-    next();
-  } catch (err) {
-    console.error(err);
-    return res.status(401).json({ message: "Invalid or expired token" });
-  }
-};
- */
-
 export const verifyToken = async (req, res, next) => {
   try {
-    
-
     const token = req.headers.authorization?.split(" ")[1] || req.query.token;
     if (!token) return handleResponse(res, 401, "No token provided");
-    // console.log("token==================>",token);
 
     const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
     const { id, role } = decoded;
 
     let user;
-
     const staffRoles = ["ADMIN", "FRONTDESK", "ACCOUNTS"];
     if (staffRoles.includes(role)) {
       user = await Staff.findById(id)
@@ -79,6 +50,15 @@ export const verifyToken = async (req, res, next) => {
         req.user = user.toObject();
         req.role = "COMPOUNDER";
       }
+    } else if (role === "SUPER_ADMIN") {
+      user = await Admin.findById({ _id: id }); 
+ 
+      if (user) {
+        req.user = {
+          _id: user._id.toString(),
+          role: "SUPER_ADMIN",
+        };
+      }
     } else {
       return handleResponse(res, 403, "Invalid user role");
     }
@@ -95,37 +75,6 @@ export const verifyToken = async (req, res, next) => {
   }
 };
 
-// export const verifyUserToken = async (req, res, next) => {
-//   try {
-//     const token = req.headers.authorization?.split(" ")[1] || req.query.token;
-
-//     if (!token) return handleResponse(res, 401, "No token provided");
-
-//     const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-
-//     let user;
-//     switch (decoded.role) {
-//       case "DOCTOR":
-//         user = await Doctor.findById(decoded.id).select("-password");
-//         break;
-//       case "COMPOUNDER":
-//         user = await Compounder.findById(decoded.id).select("-password");
-//         break;
-//       default:
-//         return handleResponse(res, 403, "Invalid user type");
-//     }
-
-//     if (!user) return handleResponse(res, 401, "Invalid or expired token");
-
-//     req.user = user.toObject();
-//     req.role = decoded.role;
-//     next();
-//   } catch (err) {
-//     console.error("verifyUserToken Error:", err);
-//     return handleResponse(res, 401, "Invalid or expired token");
-//   }
-// };
-
 export const requireRole = (roles) => (req, res, next) => {
   if (!req.user || !roles.includes(req.user.role)) {
     return res.status(403).json({ message: "Access denied" });
@@ -134,8 +83,6 @@ export const requireRole = (roles) => (req, res, next) => {
 };
 
 export const isAdmin = (req, res, next) => {
-  // console.log("req.user from middleware =======>", req.user);
-  
   if (!req.user)
     return handleResponse(res, 401, "Unauthorized: User not found");
 
@@ -176,5 +123,16 @@ export const isDoctor = (req, res, next) => {
     return handleResponse(res, 403, "Access denied: Doctors only");
   }
 
+  next();
+};
+
+export const isSuperAdmin = (req, res, next) => {
+  if (!req.user) {
+    return handleResponse(res, 401, "Unauthorized: User not found");
+  }
+
+  if (req.user.role !== "SUPER_ADMIN") {
+    return handleResponse(res, 403, "Access denied: Super Admin only");
+  }
   next();
 };

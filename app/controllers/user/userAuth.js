@@ -2,51 +2,7 @@ import Staff from "../../models/user/staff.js";
 import { generateToken } from "../../middlewares/jwtAuth.js";
 import { handleResponse } from "../../utils/responseHandler.js";
 import Compounder from "../../models/user/compounder.js";
-
-/* export const loginUser = async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-
-    if (!identifier || !password) {
-      return handleResponse(
-        res,
-        400,
-        "Identifier (phone/email) and password are required"
-      );
-    }
-
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const adminPhone = process.env.ADMIN_PHONE;
-
-    if (identifier === adminEmail || identifier === adminPhone) {
-      return handleResponse(res, 403, "This user is not allowed to login");
-    }
-
-    const staff = await Staff.findOne({ phone: identifier })
-      .select("+password")
-      .populate("role", "name");
-
-    if (!staff) return handleResponse(res, 401, "Invalid credentials");
-
-    const isMatch = await staff.comparePassword(password);
-    
-    if (!isMatch) return handleResponse(res, 401, "Invalid credentials");
-
-    staff.lastLogin = new Date();
-    await staff.save();
-
-    const token = generateToken(staff._id, staff.role.name);
-    const { password: _, ...staffData } = staff.toObject();
-
-    return handleResponse(res, 200, "Login successful", {
-      staff: staffData,
-      token,
-    });
-  } catch (error) {
-    console.error("❌ Login error:", error);
-    return handleResponse(res, 500, "Server error", { error: error.message });
-  }
-}; */
+import Admin from "../../models/user/admin.js";
 export const loginUser = async (req, res) => {
   try {
     const { identifier, password } = req.body;
@@ -59,16 +15,13 @@ export const loginUser = async (req, res) => {
       );
     }
 
-    
     const adminNames = process.env.ADMIN_NAMES?.split(",") || [];
     const adminPhones = process.env.ADMIN_PHONES?.split(",") || [];
 
-    // Prevent admin login by checking identifier against admin names or phones
     if (adminPhones.includes(identifier)) {
       return handleResponse(res, 403, "This user is not allowed to login");
     }
 
-    // Lookup staff by phone
     const staff = await Staff.findOne({ phone: identifier })
       .select("+password")
       .populate("role", "name");
@@ -94,51 +47,6 @@ export const loginUser = async (req, res) => {
     return handleResponse(res, 500, "Server error", { error: error.message });
   }
 };
-
-/* export const adminLogin = async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-
-    if (!identifier || !password) {
-      return handleResponse(res, 400, "Identifier and password are required");
-    }
-
-    // const adminEmail = process.env.ADMIN_EMAIL;
-    const adminPhone = process.env.ADMIN_PHONES;
-    console.log("adminPhone=====",adminPhone);
-    
-
-    if (identifier !== adminPhone) {
-      return handleResponse(res, 403, "Only admin is allowed to login");
-    }
-    // if (identifier !== adminEmail && identifier !== adminPhone) {
-    //   return handleResponse(res, 403, "Only admin is allowed to login");
-    // }
-
-    const admin = await Staff.findOne({ phone: adminPhone })
-      .select("+password")
-      .populate("role", "name");
-
-    if (!admin) return handleResponse(res, 404, "Admin not found");
-
-    const isMatch = await admin.comparePassword(password);
-    if (!isMatch) return handleResponse(res, 401, "Invalid credentials");
-
-    admin.lastLogin = new Date();
-    await admin.save();
-
-    const token = generateToken(admin._id, admin.role.name);
-    const { password: _, ...adminData } = admin.toObject();
-
-    return handleResponse(res, 200, "Admin login successful", {
-      staff: adminData,
-      token,
-    });
-  } catch (error) {
-    console.error("❌ Admin Login Error:", error);
-    return handleResponse(res, 500, "Server error", { error: error.message });
-  }
-}; */
 
 export const adminLogin = async (req, res) => {
   try {
@@ -223,10 +131,14 @@ export const loginCompounder = async (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     const { _id } = req.user;
+    
     const role = req.role;
     let userData;
 
     switch (role) {
+      case "SUPER_ADMIN":
+        userData = await Admin.findById(_id).select("-password -__v");
+        break;
       case "DOCTOR":
         userData = await Doctor.findById(_id)
           .populate("role", "name")

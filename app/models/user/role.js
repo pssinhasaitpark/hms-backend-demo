@@ -5,7 +5,6 @@ const roleFields = {
   name: {
     type: String,
     required: true,
-    // unique: true,
     uppercase: true,
     trim: true,
   },
@@ -16,3 +15,4 @@ const roleFields = {
 const roleSchema = createSchema(roleFields, {}, true);
 
 export default mongoose.model("Role", roleSchema);
+  

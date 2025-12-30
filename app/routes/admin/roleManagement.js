@@ -6,18 +6,16 @@ import {
   updateRole,
   deleteRole,
 } from "../../controllers/admin/user/roleManagement.js";
-import { verifyToken,isAdmin } from "../../middlewares/jwtAuth.js";
-
+import { verifyToken, isHospitalAdmin } from "../../middlewares/jwtAuth.js";
 
 const router = express.Router();
 
+router.use(verifyToken, isHospitalAdmin);
 
-router.use(verifyToken,isAdmin);
-
-router.post("/", createRole);           
-router.get("/", getRoles);              
-router.get("/:id", getRoleById);        
-router.put("/:id", updateRole);         
-router.delete("/:id", deleteRole);      
+router.post("/", createRole);
+router.get("/", getRoles);
+router.get("/:id", getRoleById);
+router.put("/:id", updateRole);
+router.delete("/:id", deleteRole);
 
 export default router;

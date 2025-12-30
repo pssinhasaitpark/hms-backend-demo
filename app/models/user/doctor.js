@@ -6,13 +6,19 @@ import { generateAutoId } from "../../utils/helper.js";
 const doctorFields = {
   doctorId: { type: String, unique: true, trim: true },
   doctorName: { type: String, required: true, trim: true },
-  phone: { type: String, required: true, unique: true, trim: true },
+  phone: { type: String, required: true, trim: true },
   password: { type: String, default: null },
   department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Department",
     required: true,
   },
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+  },
+
   qualification: { type: String, trim: true },
 
   visitChargePerDay: { type: Number, default: 0 },
@@ -23,6 +29,7 @@ const doctorFields = {
 };
 
 const doctorSchema = createSchema(doctorFields, {}, true);
+doctorSchema.index({ hospital: 1, phone: 1 }, { unique: true });
 
 doctorSchema.pre("save", async function () {
   if (this.isModified("password")) {

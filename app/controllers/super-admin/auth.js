@@ -103,3 +103,46 @@ export const superAdminLogin = async (req, res) => {
     });
   }
 };
+
+export const editAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.user._id;
+ 
+    const { name } = req.body;
+
+    const profileImageFile = req.convertedFiles?.[0] || null;
+
+    const admin = await Admin.findById({ _id: adminId });
+    
+
+    if (!admin) {
+      return handleResponse(res, 404, "Admin not found");
+    }
+
+    if (name) {
+      admin.name = name;
+    }
+
+    if (profileImageFile) {
+      admin.profile_image = profileImageFile;
+    }
+
+    await admin.save();
+
+    const updatedAdmin = await Admin.findById(adminId).select("-password");
+
+    return handleResponse(
+      res,
+      200,
+      "Admin profile updated successfully",
+      updatedAdmin
+    );
+  } catch (error) {
+    console.error(error);
+    return handleResponse(
+      res,
+      500,
+      "Something went wrong while updating profile"
+    );
+  }
+};

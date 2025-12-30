@@ -9,12 +9,26 @@ import Guest from "../../models/guest/guestDetails.js";
 import IssuedToken from "../../models/guest/tokenIssues.js";
 import { getPagination } from "../../utils/pagination.js";
 import AccountDailySummary from "../../models/frontdesk/accountDailySummary.js";
+import mongoose from "mongoose";
+import Hospital from "../../models/hospitals/hospitals.js";
 
 
 export const getTotalRevenueForAdmin = async (req, res) => {
   try {
-  
+    const hospitalId = req.user._id;
+    // const totalRevenueResult = await AccountDailySummary.aggregate([
+    //   {
+    //     $group: {
+    //       _id: null,
+    //       totalRevenue: { $sum: "$totalAmount" },
+    //     },
+    //   },
+    // ]);
+
     const totalRevenueResult = await AccountDailySummary.aggregate([
+      {
+        $match: { hospital: hospitalId },
+      },
       {
         $group: {
           _id: null,
@@ -25,25 +39,30 @@ export const getTotalRevenueForAdmin = async (req, res) => {
 
     const totalRevenue = totalRevenueResult[0]?.totalRevenue || 0;
 
-    const totalPatients = await Patient.countDocuments();
-    const totalDoctors = await Doctor.countDocuments();
+    const totalPatients = await Patient.countDocuments({
+      hospital: hospitalId,
+    });
+    const totalDoctors = await Doctor.countDocuments({ hospital: hospitalId });
 
-    const adminRole = await Role.findOne({ name: "admin" });
+    // const adminRole = await Role.findOne({ name: "admin" });
 
-    if (!adminRole) {
-      return handleResponse(res, 500, "Admin role not found");
-    }
+    // if (!adminRole) {
+    //   return handleResponse(res, 500, "Admin role not found");
+    // }
 
     const totalStaff = await Staff.countDocuments({
-      role: { $ne: adminRole._id },
+      hospital: hospitalId,
+      // role: { $ne: adminRole._id },
     });
 
-    const totalCompounders = await Compounder.countDocuments();
+    const totalCompounders = await Compounder.countDocuments({
+      hospital: hospitalId,
+    });
 
     const totalStaffAndCompounders = totalStaff + totalCompounders;
 
     const responseData = {
-      totalRevenue, // <-- ab ye AccountDailySummary se aa raha hai
+      totalRevenue,
       totalPatients,
       totalDoctors,
       totalStaffAndCompounders,
@@ -61,34 +80,37 @@ export const getTotalRevenueForAdmin = async (req, res) => {
   }
 };
 
-
 export const getFrontdeskSummaryForDenomination = async (req, res) => {
   try {
     const { summaryId } = req.query;
+    const hospitalId = req.user.hospitalId;
+
     if (!summaryId) return handleResponse(res, 400, "summaryId is required");
 
-    const accountSummary = await AccountDailySummary.findById(summaryId);
+    const accountSummary = await AccountDailySummary.findById({
+      _id: summaryId,
+      hospitalId: hospitalId,
+    });
+    // const accountSummary = await AccountDailySummary.findById(summaryId);
+
     if (!accountSummary) {
       return handleResponse(res, 404, "Account summary not found");
     }
-   
+
     const { createdAt, submittedAt, receivedAt } = accountSummary;
 
     const endOfDay = new Date(submittedAt || new Date());
     endOfDay.setHours(23, 59, 59, 999);
 
-
     const effectiveReceivedAt = receivedAt || endOfDay;
 
- 
     const startDate = createdAt;
     const endDate = submittedAt || effectiveReceivedAt;
-
 
     const patientPayments = await Invoice.aggregate([
       {
         $match: {
-          patientType: { $in: ["NEW", "FOLLOWUP", "REGULAR","PREPAID"] },
+          patientType: { $in: ["NEW", "FOLLOWUP", "REGULAR", "PREPAID"] },
           issuedAt: {
             $gte: createdAt,
             $lte: submittedAt || effectiveReceivedAt,
@@ -112,7 +134,6 @@ export const getFrontdeskSummaryForDenomination = async (req, res) => {
       },
     ]);
 
-
     const totalPatientCash = patientPayments.length
       ? patientPayments[0].totalCash
       : 0;
@@ -123,6 +144,7 @@ export const getFrontdeskSummaryForDenomination = async (req, res) => {
     const guestPayments = await Guest.aggregate([
       {
         $match: {
+          hospital: new mongoose.Types.ObjectId(req.user.hospitalId),
           createdAt: {
             $gte: createdAt,
             $lte: submittedAt || effectiveReceivedAt,
@@ -161,9 +183,11 @@ export const getFrontdeskSummaryForDenomination = async (req, res) => {
       ? guestPayments[0].totalOnline
       : 0;
 
+
     const canteenPayments = await IssuedToken.aggregate([
       {
         $match: {
+          hospital: hospitalId,
           issuedAt: {
             $gte: createdAt,
             $lte: submittedAt || effectiveReceivedAt,
@@ -202,7 +226,6 @@ export const getFrontdeskSummaryForDenomination = async (req, res) => {
       ? canteenPayments[0].totalOnline
       : 0;
 
-
     const totalCashCollected =
       totalPatientCash + totalGuestCash + totalCanteenCash;
 
@@ -210,7 +233,6 @@ export const getFrontdeskSummaryForDenomination = async (req, res) => {
       totalPatientOnline + totalGuestOnline + totalCanteenOnline;
 
     const grandTotal = totalCashCollected + totalOnlineCollected;
-
 
     return handleResponse(res, 200, "Front desk summary fetched successfully", {
       totalCashCollected,
@@ -235,9 +257,10 @@ export const getFrontdeskAccountSummary = async (req, res) => {
     const { page, limit, skip } = getPagination(req);
 
     const frontdeskId = req.user._id;
-
+    const hospitalId = req.user.hospitalId;
     const filter = {
       frontdesk: frontdeskId,
+      hospital: hospitalId,
     };
 
     if (startDate && endDate) {
@@ -292,5 +315,60 @@ export const getFrontdeskAccountSummary = async (req, res) => {
     return handleResponse(res, 500, "Failed to fetch account summaries", {
       error: error.message,
     });
+  }
+};
+
+export const superAdminDashboardReport = async (req, res) => {
+  try {
+    const superAdminId = req.user._id;
+
+ 
+    const hospitals = await Hospital.find(
+      { createdBy: superAdminId },
+      { _id: 1 }
+    );
+
+    const hospitalIds = hospitals.map(h => h._id);
+
+
+    const totalPatients = await Patient.countDocuments({
+      hospital: { $in: hospitalIds },
+    });
+
+
+    const staffCount = await Staff.countDocuments({
+      hospital: { $in: hospitalIds },
+    });
+
+    const doctorCount = await Doctor.countDocuments({
+      hospital: { $in: hospitalIds },
+    });
+
+    const compounderCount = await Compounder.countDocuments({
+      hospital: { $in: hospitalIds },
+    });
+
+    const totalStaff =
+      staffCount + doctorCount + compounderCount;
+
+    return handleResponse(res, 200, "Super admin dashboard data", {
+      totalHospitals: hospitals.length,
+      totalPatients,
+      totalStaff,
+      totalRevenue: 0,
+      breakdown: {
+        staff: staffCount,
+        doctors: doctorCount,
+        compounders: compounderCount,
+      },
+    });
+
+  } catch (error) {
+    console.error(error);
+    return handleResponse(
+      res,
+      500,
+      "Failed to fetch dashboard data"
+    );
   }
 };

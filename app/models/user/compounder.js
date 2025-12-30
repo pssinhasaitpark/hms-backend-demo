@@ -29,6 +29,12 @@ const compounderFields = {
 
   doctors: [{ type: mongoose.Schema.Types.ObjectId, ref: "Doctor" }],
   departments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Department" }],
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+    index: true,
+  },
 };
 
 const compounderSchema = createSchema(compounderFields, {}, true);

@@ -1,5 +1,9 @@
 import express from "express";
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
+import {
+  isAdmin,
+  isHospitalAdmin,
+  verifyToken,
+} from "../../middlewares/jwtAuth.js";
 import {
   deleteCompounder,
   getAllCompounders,
@@ -9,7 +13,7 @@ import {
 
 const router = express.Router();
 
-router.use(verifyToken, isAdmin);
+router.use(verifyToken, isHospitalAdmin);
 
 router.get("/", getAllCompounders);
 router.get(`/:id`, getCompounderById);

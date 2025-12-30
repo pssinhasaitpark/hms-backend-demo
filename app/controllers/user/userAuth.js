@@ -3,6 +3,8 @@ import { generateToken } from "../../middlewares/jwtAuth.js";
 import { handleResponse } from "../../utils/responseHandler.js";
 import Compounder from "../../models/user/compounder.js";
 import Admin from "../../models/user/admin.js";
+import Hospital from "../../models/hospitals/hospitals.js";
+
 export const loginUser = async (req, res) => {
   try {
     const { identifier, password } = req.body;
@@ -13,13 +15,6 @@ export const loginUser = async (req, res) => {
         400,
         "Identifier (phone/email) and password are required"
       );
-    }
-
-    const adminNames = process.env.ADMIN_NAMES?.split(",") || [];
-    const adminPhones = process.env.ADMIN_PHONES?.split(",") || [];
-
-    if (adminPhones.includes(identifier)) {
-      return handleResponse(res, 403, "This user is not allowed to login");
     }
 
     const staff = await Staff.findOne({ phone: identifier })
@@ -35,7 +30,7 @@ export const loginUser = async (req, res) => {
     staff.lastLogin = new Date();
     await staff.save();
 
-    const token = generateToken(staff._id, staff.role.name);
+    const token = generateToken(staff._id, staff.role.name, staff.hospital);
     const { password: _, ...staffData } = staff.toObject();
 
     return handleResponse(res, 200, "Login successful", {
@@ -114,7 +109,11 @@ export const loginCompounder = async (req, res) => {
     compounder.lastLogin = new Date();
     await compounder.save();
 
-    const token = generateToken(compounder._id, compounder.role.name);
+    const token = generateToken(
+      compounder._id,
+      compounder.role.name,
+      compounder.hospital
+    );
 
     const { password: _, ...compounderData } = compounder.toObject();
 
@@ -131,7 +130,63 @@ export const loginCompounder = async (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     const { _id } = req.user;
-    
+    const role = req.user.role;
+
+    let userData;
+
+    switch (role) {
+      case "SUPER_ADMIN":
+        userData = await Admin.findById(_id).select("-password -__v");
+        break;
+
+      case "hospital_admin":
+        userData = await Hospital.findById(_id).select(
+          "-password -plain_password -__v"
+        );
+        break;
+
+      case "DOCTOR":
+        userData = await Doctor.findById(_id)
+          .populate("role", "name")
+          .populate("hospital", "hospital_name logo")
+          .select("-password");
+        break;
+
+      case "COMPOUNDER":
+        userData = await Compounder.findById(_id)
+          .populate("role", "name")
+          .populate("hospital", "hospital_name logo")
+          .select("-password -doctors -departments");
+        break;
+
+      default:
+        userData = await Staff.findById(_id)
+          .populate("role", "name")
+          .populate("hospital", "hospital_name logo")
+          .select("-password");
+        break;
+    }
+
+    if (!userData) {
+      return handleResponse(res, 404, "User not found");
+    }
+
+    return handleResponse(
+      res,
+      200,
+      "Profile fetched successfully",
+      userData.toObject()
+    );
+  } catch (error) {
+    console.error("❌ Get profile error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+};
+
+/* export const getProfile = async (req, res) => {
+  try {
+    const { _id } = req.user;
+
     const role = req.role;
     let userData;
 
@@ -171,7 +226,7 @@ export const getProfile = async (req, res) => {
     return handleResponse(res, 500, "Server error", { error: error.message });
   }
 };
-
+ */
 export const changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword, confirmPassword } = req.body;
@@ -193,11 +248,14 @@ export const changePassword = async (req, res) => {
     }
 
     let userModel;
-    if (req.role === "DOCTOR") userModel = Doctor;
-    else if (req.role === "COMPOUNDER") userModel = Compounder;
+    if (req.user.role === "DOCTOR") userModel = Doctor;
+    else if (req.user.role === "COMPOUNDER") userModel = Compounder;
+    else if (req.user.role === "SUPER_ADMIN") userModel = Admin;
     else userModel = Staff;
 
-    const user = await userModel.findById(req.user._id).select("+password");
+    const id = req.user._id;
+
+    const user = await userModel.findById(id).select("+password");
 
     if (!user) return handleResponse(res, 404, "User not found");
 
@@ -238,7 +296,6 @@ export const editProfile = async (req, res) => {
     const { _id, role } = req.user;
     const { name, address } = req.body;
 
-    // Check if at least one field is provided (either name or address)
     if (!name && !address) {
       return handleResponse(
         res,

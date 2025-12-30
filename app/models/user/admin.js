@@ -30,7 +30,6 @@ const adminFields = {
     required: true,
     select: false,
   },
-
   adminId: {
     type: String,
     unique: true,
@@ -38,9 +37,13 @@ const adminFields = {
   },
   role: {
     type: String,
-    enum: ["SUPER_ADMIN"]
+    enum: ["SUPER_ADMIN"],
   },
-
+  profile_image: {
+    type: String,
+    trim: true,
+    default: null,
+  },
   lastLogin: {
     type: Date,
   },

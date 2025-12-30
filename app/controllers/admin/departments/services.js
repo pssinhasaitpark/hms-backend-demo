@@ -7,11 +7,10 @@ import { updateStatus } from "../../../utils/updateStatus.js";
 import Doctor from "../../../models/user/doctor.js";
 import DoctorService from "../../../models/departments/doctorServices.js";
 
-
 export const createService = async (req, res) => {
   try {
     const { name, description, department, charge } = req.body || {};
-
+    const hospital = req.user._id;
     if (charge === undefined || charge < 0) {
       return handleResponse(res, 400, "Charge is required and must be >= 0");
     }
@@ -19,7 +18,11 @@ export const createService = async (req, res) => {
     const deptExists = await Department.findById(department);
     if (!deptExists) return handleResponse(res, 404, "Department not found");
 
-    const existing = await Service.findOne({ name: name.trim(), department });
+    const existing = await Service.findOne({
+      name: name.trim(),
+      department,
+      hospital,
+    });
     if (existing) {
       return handleResponse(
         res,
@@ -28,17 +31,15 @@ export const createService = async (req, res) => {
       );
     }
 
-    // Create the service
     const service = await Service.create({
       name: name.trim(),
       description,
       department,
       charge,
-      createdBy: req.user?._id || null,
+      hospital: hospital,
     });
 
-    // 🔹 Automatically assign this new service to all doctors in this department
-    const doctorsInDepartment = await Doctor.find({ department });
+    const doctorsInDepartment = await Doctor.find({ department, hospital });
     if (doctorsInDepartment.length > 0) {
       const doctorServiceDocs = doctorsInDepartment.map((d) => ({
         doctor: d._id,
@@ -56,12 +57,12 @@ export const createService = async (req, res) => {
   }
 };
 
-export const getServices = async (req, res) => {
+/* export const getServices = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
     const { search, departmentId } = req.query;
-
-    const query = {};
+    const hospital = req.user._id;
+    const query = { hospital };
 
     if (search) {
       try {
@@ -86,8 +87,85 @@ export const getServices = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("department")
-      .populate("createdBy");
+      .populate("department");
+    // .populate("createdBy");
+
+    const services = servicesData.map((service) => {
+      const obj = service.toObject();
+
+      if (obj.createdBy) {
+        obj.createdBy = {
+          _id: obj.createdBy._id,
+          name: `${obj.createdBy.fullName}`,
+        };
+      }
+
+      if (obj.department) {
+        obj.department = {
+          _id: obj.department._id,
+          name: obj.department.name,
+        };
+      }
+
+      return obj;
+    });
+
+    const pagination = {
+      totalItems,
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+    };
+
+    return handleResponse(res, 200, "Services fetched successfully", {
+      services,
+      pagination,
+    });
+  } catch (error) {
+    console.error("❌ Get services error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+}; */
+
+
+export const getServices = async (req, res) => {
+  try {
+    const { page, limit, skip } = getPagination(req);
+    const { search, departmentId } = req.query;
+
+    let hospitalId;
+    if (req.user.role === "hospital_admin") {
+      hospitalId = req.user._id;
+    } else {
+      hospitalId = req.user.hospitalId;
+    }
+
+    const query = { hospital: hospitalId };
+
+    if (search) {
+      try {
+        const sanitizedSearch = search.replace(
+          /[\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g,
+          "\\$&"
+        );
+        query.name = { $regex: sanitizedSearch, $options: "i" };
+      } catch (regexError) {
+        return handleResponse(res, 400, "Invalid search query", {
+          error: "Invalid regular expression in search query",
+        });
+      }
+    }
+
+    if (departmentId) {
+      query.department = departmentId;
+    }
+
+    const totalItems = await Service.countDocuments(query);
+    const servicesData = await Service.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("department");
 
     const services = servicesData.map((service) => {
       const obj = service.toObject();
@@ -131,7 +209,10 @@ export const getServiceById = async (req, res) => {
 
   if (!validateObjectId(id, res, "service ID")) return;
 
-  const service = await Service.findById(id)
+  const service = await Service.findById({
+    _id: id,
+    hospital: req.user._id,
+  })
     .populate("department")
     .populate("createdBy");
 
@@ -161,7 +242,10 @@ export const updateService = async (req, res) => {
       return handleResponse(res, 400, "Charge must be >= 0");
     }
 
-    const service = await Service.findById(id);
+    const service = await Service.findById({
+      _id: id,
+      hospital: req.user._id,
+    });
     if (!service) return handleResponse(res, 404, "Service not found");
 
     const newDepartment = department || service.department;
@@ -197,8 +281,7 @@ export const updateService = async (req, res) => {
   }
 };
 
-
-export const deleteService = async (req, res) => {
+/* export const deleteService = async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateObjectId(id, res, "service ID")) return;
@@ -211,7 +294,10 @@ export const deleteService = async (req, res) => {
       return handleResponse(res, 404, "Service not found");
     }
 
-    await Service.findByIdAndDelete(id);
+    await Service.findByIdAndDelete({
+      _id: id,
+      hospital: req.user._id,
+    });
 
     const serviceObj = service.toObject();
     if (serviceObj.createdBy) {
@@ -223,6 +309,39 @@ export const deleteService = async (req, res) => {
 
     return handleResponse(res, 200, "Service deleted successfully", {
       service: serviceObj,
+    });
+  } catch (error) {
+    console.error("❌ Delete service error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+};
+ */
+
+export const deleteService = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateObjectId(id, res, "service ID")) return;
+
+    const service = await Service.findOne({
+      _id: id,
+      hospital: req.user._id,
+    })
+      .populate("department", "_id name")
+      .populate("createdBy");
+
+    if (!service) {
+      return handleResponse(res, 404, "Service not found");
+    }
+
+    await DoctorService.deleteMany({ service: id });
+
+    await Service.deleteOne({
+      _id: id,
+      hospital: req.user._id,
+    });
+
+    return handleResponse(res, 200, "Service deleted successfully", {
+      service,
     });
   } catch (error) {
     console.error("❌ Delete service error:", error);

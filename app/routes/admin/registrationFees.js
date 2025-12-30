@@ -5,11 +5,14 @@ import {
   getRegistrationFee,
 } from "../../controllers/admin/departments/registrationFees.js";
 
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
+import {
+  isHospitalAdmin,
+  verifyToken,
+} from "../../middlewares/jwtAuth.js";
 
 const router = express.Router();
 
-router.use(verifyToken, isAdmin);
+router.use(verifyToken, isHospitalAdmin);
 
 router.post("/", createOrUpdateRegistrationFee);
 

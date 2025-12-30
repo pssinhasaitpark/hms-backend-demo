@@ -16,9 +16,16 @@ const packageFields = {
     ref: "Department",
     required: true,
   },
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+    index: true,
+  },
 };
 
 const packageSchema = createSchema(packageFields, {}, true);
+packageSchema.index({ hospital: 1, name: 1 }, { unique: true });
 
 packageSchema.pre("save", async function () {
   if (!this.packageId) {

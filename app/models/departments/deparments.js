@@ -7,10 +7,17 @@ const departmentFields = {
   description: { type: String, trim: true },
   departmentId: { type: String, unique: true, trim: true },
   services: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],
-  opdCharge: { type: Number, default: 0 },   
+  opdCharge: { type: Number, default: 0 },
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+  },
 };
 
-const departmentSchema = createSchema(departmentFields, {}, true);
+const departmentSchema = createSchema(departmentFields, {});
+
+departmentSchema.index({ name: 1, hospital: 1 }, { unique: true });
 
 departmentSchema.pre("save", async function () {
   if (!this.departmentId) {

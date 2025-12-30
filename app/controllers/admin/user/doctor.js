@@ -9,7 +9,6 @@ import { getPagination } from "../../../utils/pagination.js";
 import { validateObjectId } from "../../../utils/helper.js";
 
 
-
 export const registerDoctor = async (req, res) => {
   try {
     const {
@@ -23,31 +22,39 @@ export const registerDoctor = async (req, res) => {
       availability,
     } = req.body || {};
 
-    // Check if doctor already exists
-    const existingDoctor = await Doctor.findOne({ phone });
+    const hospitalId = req.user._id;
+  
+    const existingDoctor = await Doctor.findOne({
+      phone,
+      hospital: hospitalId,
+    });
     if (existingDoctor) {
-      return handleResponse(res, 400, "Doctor with this phone already exists");
+      return handleResponse(
+        res,
+        400,
+        "Doctor with this phone already exists in your hospital"
+      );
     }
 
-    // Check if department exists
-    const department = await Department.findById(departmentId);
+    const department = await Department.findOne({
+      _id: departmentId,
+      hospital: hospitalId,
+    });
     if (!department) {
       return handleResponse(res, 404, "Department not found");
     }
-
-    // Create doctor
     const doctor = new Doctor({
       doctorName,
       phone,
       password,
       department: department._id,
+      hospital: hospitalId,
       qualification,
       visitChargePerDay,
       fixedCharge,
     });
     await doctor.save();
 
-    // Save availability if provided
     if (availability && availability.length > 0) {
       const availabilityDocs = availability.map((a) => ({
         doctor: doctor._id,
@@ -71,6 +78,7 @@ export const registerDoctor = async (req, res) => {
     const doctorServices = await DoctorService.find({
       doctor: doctor._id,
     }).populate("service", "serviceId name description charge");
+
     const doctorAvailability = await DoctorAvailability.find({
       doctor: doctor._id,
     });
@@ -136,27 +144,22 @@ export const loginDoctor = async (req, res) => {
   }
 };
 
-
 export const getAllDoctors = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
     let { search, departmentId } = req.query;
-
-    const query = { status: { $ne: "deleted" } };
-
+    const hospitalId = req.user._id;
+    const query = { hospital: hospitalId };
 
     if (departmentId) {
       let departmentIdsArray = [];
 
       if (Array.isArray(departmentId)) {
-     
         departmentIdsArray = departmentId;
       } else if (departmentId.includes(",")) {
- 
         departmentIdsArray = departmentId.split(",");
       } else {
         try {
-        
           const parsed = JSON.parse(departmentId);
           if (Array.isArray(parsed)) {
             departmentIdsArray = parsed;
@@ -164,7 +167,6 @@ export const getAllDoctors = async (req, res) => {
             departmentIdsArray = [departmentId];
           }
         } catch {
-
           departmentIdsArray = [departmentId];
         }
       }
@@ -172,11 +174,9 @@ export const getAllDoctors = async (req, res) => {
       query.department = { $in: departmentIdsArray };
     }
 
-  
     if (search) {
       query.doctorName = { $regex: search, $options: "i" };
     }
-
 
     const doctors = await Doctor.find(query)
       .populate("department", "name description")
@@ -230,13 +230,16 @@ export const getAllDoctors = async (req, res) => {
   }
 };
 
-
 export const getDoctorById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateObjectId(id, res, "doctor ID")) return;
-
-    const doctor = await Doctor.findOne({ _id: id, status: { $ne: "deleted" } })
+    const hospitalId = req.user._id;
+    const doctor = await Doctor.findOne({
+      _id: id,
+      hospital: hospitalId,
+    })
+      .select("-password")
       .populate("department", "name description")
       .lean();
 
@@ -268,7 +271,6 @@ export const getDoctorById = async (req, res) => {
   }
 };
 
-
 export const updateDoctor = async (req, res) => {
   try {
     const { id } = req.params;
@@ -294,9 +296,12 @@ export const updateDoctor = async (req, res) => {
       "Saturday",
     ];
 
-    const doctor = await Doctor.findById(id);
+    const hospitalId = req.user._id;
+
+    const doctor = await Doctor.findOne({ _id: id, hospital: hospitalId });
+
     if (!doctor) {
-      return handleResponse(res, 404, "Doctor not found");
+      return handleResponse(res, 404, "Doctor not found in your hospital");
     }
 
     if (phone && phone !== doctor.phone) {
@@ -315,6 +320,23 @@ export const updateDoctor = async (req, res) => {
     if (fixedCharge !== undefined) doctor.fixedCharge = fixedCharge;
 
     let oldDepartmentId = doctor.department;
+
+
+    if (departmentId && departmentId !== oldDepartmentId.toString()) {
+   
+      const newDepartment = await Department.findOne({
+        _id: departmentId,
+        hospital: hospitalId,
+      });
+
+      if (!newDepartment) {
+        return handleResponse(
+          res,
+          404,
+          "Department not found in your hospital"
+        );
+      }
+    }
 
     if (departmentId && departmentId !== oldDepartmentId.toString()) {
       const newDepartment = await Department.findById(departmentId);
@@ -378,7 +400,6 @@ export const updateDoctor = async (req, res) => {
     // }
 
     if (availability && Array.isArray(availability)) {
-     
       await DoctorAvailability.deleteMany({ doctor: doctor._id });
 
       for (const a of availability) {
@@ -420,7 +441,7 @@ export const updateDoctor = async (req, res) => {
   }
 };
 
-export const deleteDoctor = async (req, res) => {
+/* export const deleteDoctor = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -438,3 +459,33 @@ export const deleteDoctor = async (req, res) => {
     return handleResponse(res, 500, "Server error", { error: error.message });
   }
 };
+ */
+
+export const deleteDoctor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const hospitalId = req.user._id;
+
+    const doctor = await Doctor.findOne({ _id: id, hospital: hospitalId }).select("-password");
+
+    if (!doctor) {
+      return handleResponse(res, 404, "Doctor not found in your hospital");
+    }
+
+    await Doctor.findByIdAndDelete(id);
+
+    await DoctorService.deleteMany({ doctor: id });
+    await DoctorAvailability.deleteMany({ doctor: id });
+
+    return handleResponse(
+      res,
+      200,
+      "Doctor and all related data deleted successfully",
+      doctor
+    );
+  } catch (error) {
+    console.error("❌ Delete doctor error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+};
+

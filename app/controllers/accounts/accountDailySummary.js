@@ -11,12 +11,21 @@ import IssuedToken from "../../models/guest/tokenIssues.js";
 import PatientVisitRecords from "../../models/frontdesk/patientVisitRecords.js";
 import Staff from "../../models/user/staff.js";
 
+const getHospitalFilter = (req) => {
+  if (req.user.role === "hospital_admin") {
+    return { hospital: req.user._id };
+  } else {
+    return { hospital: req.user.hospitalId };
+  }
+};
+
 export const getAllAccountSummaries = async (req, res) => {
   try {
     const { startDate, endDate, frontdeskId, status, search } = req.query;
     const { page, limit, skip } = getPagination(req);
-    const filter = {};
 
+    // const filter = {};
+    const filter = { ...getHospitalFilter(req) };
     if (startDate && endDate) {
       filter.date = {
         $gte: new Date(new Date(startDate).setHours(0, 0, 0, 0)),
@@ -96,7 +105,11 @@ export const getAccountSummaryStatus = async (req, res) => {
       return handleResponse(res, 400, "summaryId is required");
     }
 
-    const accountSummary = await AccountDailySummary.findById(summaryId);
+    const accountSummary = await AccountDailySummary.findById({
+      _id: summaryId,
+      ...getHospitalFilter(req),
+    });
+    // const accountSummary = await AccountDailySummary.findById(summaryId);
 
     if (!accountSummary) {
       return handleResponse(res, 404, "Account summary not found");
@@ -125,7 +138,12 @@ export const getAccountDetailsByFrontdesk = async (req, res) => {
       return handleResponse(res, 400, "frontdeskId is required");
     if (!summaryId) return handleResponse(res, 400, "summaryId is required");
 
-    const accountSummary = await AccountDailySummary.findById(summaryId);
+    const accountSummary = await AccountDailySummary.findById({
+      _id: summaryId,
+      ...getHospitalFilter(req),
+    });
+    // const accountSummary = await AccountDailySummary.findById(summaryId);
+
     if (!accountSummary) {
       return handleResponse(res, 404, "Account summary not found");
     }
@@ -263,7 +281,10 @@ export const getAllDoctors = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
 
-    const doctors = await Doctor.find({ status: { $ne: "deleted" } })
+    const doctors = await Doctor.find({
+      status: { $ne: "deleted" },
+      hospital: req.user.hospitalId,
+    })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -322,7 +343,6 @@ export const getAllDoctors = async (req, res) => {
   }
 };
 
-
 const formatTime = (date) => {
   if (!date) return "-";
   return new Date(date).toLocaleTimeString("en-US", {
@@ -330,7 +350,6 @@ const formatTime = (date) => {
     minute: "2-digit",
   });
 };
-
 
 export const getMonthlyAttendance = async (req, res) => {
   try {
@@ -341,7 +360,10 @@ export const getMonthlyAttendance = async (req, res) => {
       return handleResponse(res, 400, "Month is required (format: YYYY-MM)");
     }
 
-    const doctor = await Doctor.findById(doctorId)
+    const doctor = await Doctor.findById({
+      _id: doctorId,
+      hospital: req.user.hospitalId, 
+    })
       .select(
         "doctorId doctorName phone department qualification createdAt visitChargePerDay fixedCharge"
       )
@@ -521,7 +543,10 @@ export const submitCashDenominations = async (req, res) => {
       summaryId,
     } = req.body;
 
-    const accountSummary = await AccountDailySummary.findById(summaryId);
+    const accountSummary = await AccountDailySummary.findById({
+      _id: summaryId,
+      ...getHospitalFilter(req),
+    });
 
     if (!accountSummary) {
       return handleResponse(
@@ -646,7 +671,10 @@ export const getCashDenomination = async (req, res) => {
   try {
     const { summaryId } = req.params;
 
-    const summary = await AccountDailySummary.findById(summaryId)
+    const summary = await AccountDailySummary.findById({
+      _id: summaryId,
+      ...getHospitalFilter(req),
+    })
       .populate({
         path: "cashDenominations",
         populate: { path: "frontdesk", select: "name" },
@@ -679,7 +707,6 @@ export const getCashDenomination = async (req, res) => {
   }
 };
 
-
 export const updateTransactionStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -695,13 +722,16 @@ export const updateTransactionStatus = async (req, res) => {
       );
     }
 
-    const accountSummary = await AccountDailySummary.findById(id);
+    const accountSummary = await AccountDailySummary.findById({
+      _id: id,
+      ...getHospitalFilter(req),
+    });
+    // const accountSummary = await AccountDailySummary.findById(id);
 
     if (!accountSummary) {
       return handleResponse(res, 404, "Account daily summary not found.");
     }
 
- 
     if (
       accountSummary.transactionStatus === "declined" &&
       transactionStatus === "received"
@@ -712,7 +742,6 @@ export const updateTransactionStatus = async (req, res) => {
         "Cannot change status from 'declined' to 'received'."
       );
     }
-
 
     if (
       accountSummary.transactionStatus === "received" &&
@@ -725,7 +754,6 @@ export const updateTransactionStatus = async (req, res) => {
       );
     }
 
-
     if (transactionStatus === "declined") {
       if (accountSummary.cashDenominations?.length > 0) {
         await CashDenomination.deleteMany({
@@ -737,7 +765,6 @@ export const updateTransactionStatus = async (req, res) => {
       accountSummary.transactionStatus = "pending";
       accountSummary.receivedAt = null;
     }
-
 
     if (transactionStatus === "received") {
       accountSummary.transactionStatus = "received";
@@ -756,4 +783,3 @@ export const updateTransactionStatus = async (req, res) => {
     });
   }
 };
-

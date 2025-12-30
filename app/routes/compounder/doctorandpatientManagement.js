@@ -15,24 +15,21 @@ import { isCompounder, verifyToken } from "../../middlewares/jwtAuth.js";
 
 const router = express.Router();
 
-router.get("/doctors", verifyToken, isCompounder, getAssignedDoctors);
+router.use(verifyToken, isCompounder);
+
+router.get("/doctors", getAssignedDoctors);
 
 router.post(
   "/doctors/checkin/:doctorId",
-  verifyToken,
-  isCompounder,
   checkInDoctor
 );
 router.post(
   "/doctors/checkout/:doctorId",
-  verifyToken,
-  isCompounder,
   checkOutDoctor
 );
 
 router.put(
   "/patients/appointment/status/:patientId",
-  verifyToken,
   updatePatientAppointmentStatus
 );
 
@@ -40,8 +37,6 @@ router.get("/patients/appointment/completed", getCompletedPatients);
 
 router.get(
   "/patients/assigned/all",
-  verifyToken,
-  isCompounder,
   getCompounderAssignedPatients
 );
 

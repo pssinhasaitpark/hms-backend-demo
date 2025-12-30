@@ -1,14 +1,16 @@
 import express from "express";
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
+import { isAdmin, isHospitalAdmin, isSuperAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
 import {
     getFrontdeskAccountSummary,
   getFrontdeskSummaryForDenomination,
   getTotalRevenueForAdmin,
+  superAdminDashboardReport,
 } from "../../controllers/reports/reports.js";
 
 const router = express.Router();
 
-router.get("/admin/revenue", verifyToken, isAdmin, getTotalRevenueForAdmin);
+router.get("/admin/revenue", verifyToken, isHospitalAdmin, getTotalRevenueForAdmin);
+router.get("/super-admin/dashboard", verifyToken, isSuperAdmin, superAdminDashboardReport);
 
 router.get(
   "/frontdesk/today/collection",

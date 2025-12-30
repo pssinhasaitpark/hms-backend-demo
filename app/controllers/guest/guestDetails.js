@@ -6,9 +6,11 @@ import { getPagination, getPaginatedResponse } from "../../utils/pagination.js";
 import { updateAccountDailySummary } from "../../utils/accountDailySummary.js";
 import Bed from "../../models/guest/bed.js";
 import GuestPatient from "../../models/guest/guestPatients.js";
+import mongoose from "mongoose";
+import { withTransaction } from "../../utils/withTransaction.js";
 
 
-export const createGuest = async (req, res) => {
+ export const createGuest = async (req, res) => {
   try {
     const {
       name,
@@ -23,7 +25,6 @@ export const createGuest = async (req, res) => {
       paymentType,
       role,
     } = req.body;
-    // console.log("req.body==",req.body);
 
     let additionalPersons = [];
     if (req.body.additionalPersons) {
@@ -115,6 +116,8 @@ export const createGuest = async (req, res) => {
       reservationStatus: "booked",
       uploadedFiles: req.convertedFiles || [],
       createdBy: req.user._id,
+
+      hospital: req.user.hospitalId,
     });
 
     await guest.save();
@@ -126,7 +129,8 @@ export const createGuest = async (req, res) => {
       paymentType === "cash" ? parseFloat(totalPrice) : 0,
       paymentType === "online" ? parseFloat(totalPrice) : 0,
       0,
-      0
+      0,
+      req.user.hospitalId
     );
 
     return handleResponse(res, 201, "Guest booked successfully", guest);
@@ -134,9 +138,136 @@ export const createGuest = async (req, res) => {
     console.error(error);
     return handleResponse(res, 500, "Error creating guest", error.message);
   }
-};
+}; 
 
 
+/* export const createGuest = async (req, res) => {
+  try {
+    const result = await withTransaction(async (session) => {
+      const {
+        name,
+        age,
+        gender,
+        mobile,
+        aadhar_no,
+        address,
+        referredBy,
+        startDate,
+        endDate,
+        paymentType,
+        role,
+      } = req.body;
+
+      let additionalPersons = [];
+      if (req.body.additionalPersons) {
+        additionalPersons = JSON.parse(req.body.additionalPersons);
+      }
+
+      let patientDetails = null;
+      if (req.body.patientDetails) {
+        patientDetails = JSON.parse(req.body.patientDetails);
+      }
+
+      let patientData;
+      if (role === "patient" || (role === "attendant" && !patientDetails)) {
+        patientData = { name, age, gender, aadhar_no };
+      } else if (role === "attendant" && patientDetails) {
+        patientData = patientDetails;
+      }
+
+      if (!patientData) {
+        throw new Error("Patient details are required");
+      }
+
+      // 🔹 GuestPatient
+      let patient = await GuestPatient.findOne({
+        aadhar_no: patientData.aadhar_no,
+      }).session(session);
+
+      if (!patient) {
+        patient = new GuestPatient(patientData);
+        await patient.save({ session });
+      }
+
+      // 🔹 Date calculation
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(10, 0, 0, 0);
+
+      const startMidnight = new Date(start);
+      startMidnight.setHours(0, 0, 0, 0);
+
+      const endMidnight = new Date(end);
+      endMidnight.setHours(0, 0, 0, 0);
+
+      let numberOfNights = Math.ceil(
+        (endMidnight - startMidnight) / (1000 * 60 * 60 * 24)
+      );
+
+      if (numberOfNights <= 0) numberOfNights = 1;
+      if (numberOfNights > 10) {
+        throw new Error("Booking cannot exceed 10 nights");
+      }
+
+      const totalGuests = 1 + additionalPersons.length;
+
+      const pricePerBed = Number(process.env.DEFAULT_PRICE_PER_BED);
+      if (!pricePerBed || pricePerBed <= 0) {
+        throw new Error("DEFAULT_PRICE_PER_BED not configured properly");
+      }
+
+      const totalPrice = Number(
+        (pricePerBed * totalGuests * numberOfNights).toFixed(2)
+      );
+
+      // 🔹 Guest booking
+      const guest = new Guest({
+        name,
+        age,
+        gender,
+        mobile,
+        aadhar_no,
+        address,
+        referredBy,
+        role,
+        patient: patient._id,
+        numberOfPeople: totalGuests,
+        additionalPersons,
+        startDate,
+        endDate,
+        totalBedsBooked: totalGuests,
+        totalPrice,
+        paymentType,
+        reservationStatus: "booked",
+        uploadedFiles: req.convertedFiles || [],
+        createdBy: req.user._id,
+        hospital: req.user.hospitalId,
+      });
+
+      await guest.save({ session });
+
+      // 🔹 Account summary
+      await updateAccountDailySummary(
+        req.user._id,
+        0,
+        0,
+        paymentType === "cash" ? totalPrice : 0,
+        paymentType === "online" ? totalPrice : 0,
+        0,
+        0,
+        req.user.hospitalId,
+        session
+      );
+
+      return guest;
+    });
+
+    return handleResponse(res, 201, "Guest booked successfully", result);
+  } catch (error) {
+    console.error(error);
+    return handleResponse(res, 500, error.message);
+  }
+}; */
 
 export const getGuestById = async (req, res) => {
   try {
@@ -144,7 +275,10 @@ export const getGuestById = async (req, res) => {
 
     if (!validateObjectId(id, res, "guest ID")) return;
 
-    const guest = await Guest.findOne({ _id: id })
+    const guest = await Guest.findOne({
+      _id: id,
+      hospital: req.user.hospitalId,
+    })
       .populate({
         path: "room",
         select: "roomNumber roomType pricePerBed",
@@ -196,13 +330,163 @@ export const getGuestById = async (req, res) => {
   }
 };
 
-
 export const getAllGuests = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
     const { search, date, status } = req.query;
 
-    let matchStage = {};
+    let hospitalId;
+    if (req.user.role === "hospital_admin") {
+      hospitalId = new mongoose.Types.ObjectId(req.user._id);
+    } else if (req.user.role === "FRONTDESK") {
+      hospitalId = new mongoose.Types.ObjectId(req.user.hospitalId);
+    } else {
+      return handleResponse(res, 403, "Unauthorized role");
+    }
+
+    // let hospitalId;
+    // if (req.user.role === "hospital_admin") {
+    //   hospitalId = req.user._id;
+    // } else if (req.user.role === "FRONTDESK") {
+    //   hospitalId = req.user.hospitalId;
+    // } else {
+    //   return handleResponse(res, 403, "Unauthorized role");
+    // }
+    //  console.log("hospitalId===",hospitalId);
+
+    let matchStage = { hospital: hospitalId };
+
+    if (search) {
+      matchStage.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { aadhar_no: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (status) {
+      matchStage.reservationStatus = status;
+    }
+
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      matchStage.createdAt = { $gte: start, $lte: end };
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const pipeline = [
+      { $match: matchStage },
+
+      {
+        $addFields: {
+          sortRank: {
+            $switch: {
+              branches: [
+                {
+                  case: {
+                    $and: [
+                      { $eq: ["$reservationStatus", "booked"] },
+                      { $gte: ["$startDate", todayStart] },
+                      { $lte: ["$startDate", todayEnd] },
+                    ],
+                  },
+                  then: 1,
+                },
+                {
+                  case: {
+                    $and: [
+                      { $eq: ["$reservationStatus", "checked-in"] },
+                      { $gte: ["$endDate", todayStart] },
+                      { $lte: ["$endDate", todayEnd] },
+                    ],
+                  },
+                  then: 2,
+                },
+                {
+                  case: { $eq: ["$reservationStatus", "checked-in"] },
+                  then: 3,
+                },
+                { case: { $eq: ["$reservationStatus", "booked"] }, then: 4 },
+                {
+                  case: { $eq: ["$reservationStatus", "checked-out"] },
+                  then: 5,
+                },
+              ],
+              default: 99,
+            },
+          },
+        },
+      },
+
+      { $sort: { sortRank: 1, endDate: 1, startDate: 1 } },
+
+      { $skip: skip },
+      { $limit: limit },
+
+      {
+        $lookup: {
+          from: "guestrooms",
+          localField: "room",
+          foreignField: "_id",
+          as: "room",
+        },
+      },
+      { $unwind: { path: "$room", preserveNullAndEmptyArrays: true } },
+
+      {
+        $lookup: {
+          from: "guestpatients",
+          localField: "patient",
+          foreignField: "_id",
+          as: "patient",
+        },
+      },
+      { $unwind: { path: "$patient", preserveNullAndEmptyArrays: true } },
+
+      {
+        $lookup: {
+          from: "beds",
+          localField: "beds",
+          foreignField: "_id",
+          as: "beds",
+        },
+      },
+
+      {
+        $project: {
+          additionalPersons: 0,
+          uploadedFiles: 0,
+          patient: 0,
+          beds: 0,
+          role: 0,
+          room: 0,
+        },
+      },
+    ];
+
+    const guests = await Guest.aggregate(pipeline);
+    const total = await Guest.countDocuments(matchStage);
+
+    const response = getPaginatedResponse(guests, total, page, limit, "guests");
+    handleResponse(res, 200, "Guests fetched successfully", response);
+  } catch (error) {
+    console.error(error);
+    handleResponse(res, 500, "Error fetching guests", error.message);
+  }
+};
+
+/* export const getAllGuests = async (req, res) => {
+  try {
+    const { page, limit, skip } = getPagination(req);
+    const { search, date, status } = req.query;
+
+    let matchStage = { hospital: req.user.hospitalId };
 
     if (search) {
       matchStage.$or = [
@@ -317,7 +601,7 @@ export const getAllGuests = async (req, res) => {
           patient: 0,
           beds: 0,
           role: 0,
-          room: 0,  
+          room: 0,
         },
       },
     ];
@@ -331,17 +615,25 @@ export const getAllGuests = async (req, res) => {
     console.error(error);
     handleResponse(res, 500, "Error fetching guests", error.message);
   }
-};
-
+}; */
 
 export const updateGuest = async (req, res) => {
   try {
     const { aadhar } = req.params;
     const updatedData = req.body;
 
-    const guest = await Guest.findOneAndUpdate({ aadhar }, updatedData, {
-      new: true,
-    });
+    // const guest = await Guest.findOneAndUpdate({ aadhar }, updatedData, {
+    //   new: true,
+    // });
+
+    const guest = await Guest.findOneAndUpdate(
+      {
+        aadhar_no: aadhar,
+        hospital: req.user.hospitalId,
+      },
+      updatedData,
+      { new: true }
+    );
 
     if (!guest) {
       return handleResponse(res, 404, "Guest not found");
@@ -357,7 +649,12 @@ export const updateGuest = async (req, res) => {
 export const deleteGuest = async (req, res) => {
   try {
     const { id } = req.params;
-    const guest = await Guest.findOneAndDelete({ id });
+    // const guest = await Guest.findOneAndDelete({ id });
+
+    const guest = await Guest.findOneAndDelete({
+      _id: id,
+      hospital: req.user.hospitalId,
+    });
 
     if (!guest) {
       return handleResponse(res, 404, "Guest not found");
@@ -370,9 +667,7 @@ export const deleteGuest = async (req, res) => {
   }
 };
 
-
-
-export const getAvailableRooms = async (req, res) => {
+/* export const getAvailableRooms = async (req, res) => {
   try {
     let page = parseInt(req.query.page) || 1;
     let limit = parseInt(req.query.limit) || 20;
@@ -381,11 +676,15 @@ export const getAvailableRooms = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const rooms = await GuestRoom.find()
-
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const rooms = await GuestRoom.find({
+      hospital: req.user.hospitalId,
+    }).skip(skip)
+    .limit(limit)
+    .lean();
+      // const rooms = await GuestRoom.find()
+      // .skip(skip)
+      // .limit(limit)
+      // .lean();
 
     const roomsWithBeds = await Promise.all(
       rooms.map(async (room) => {
@@ -414,6 +713,75 @@ export const getAvailableRooms = async (req, res) => {
     );
 
     const totalRooms = await GuestRoom.countDocuments();
+
+    const paginatedResponse = getPaginatedResponse(
+      roomsWithBeds,
+      totalRooms,
+      page,
+      limit
+    );
+
+    return handleResponse(
+      res,
+      200,
+      "Rooms fetched successfully",
+      paginatedResponse
+    );
+  } catch (error) {
+    console.error("❌ Get available rooms error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+}; */
+
+export const getAvailableRooms = async (req, res) => {
+  try {
+    let page = parseInt(req.query.page) || 1;
+    let limit = parseInt(req.query.limit) || 20;
+    if (page < 1) page = 1;
+    if (limit < 1) limit = 20;
+
+    const skip = (page - 1) * limit;
+
+    const rooms = await GuestRoom.find({
+      hospital: req.user.hospitalId,
+    })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const roomsWithBeds = await Promise.all(
+      rooms.map(async (room) => {
+        let beds = await Bed.find({ room: room._id })
+          .select("bedNumber isOccupied occupiedBy")
+          .lean();
+
+        beds.sort((a, b) => {
+          const numA = parseInt(a.bedNumber.split("_")[1], 10);
+          const numB = parseInt(b.bedNumber.split("_")[1], 10);
+          return numA - numB;
+        });
+
+        const guestsInRoom = await Guest.aggregate([
+          { $match: { room: room._id } },
+          {
+            $group: { _id: "$room", totalBooked: { $sum: "$totalBedsBooked" } },
+          },
+        ]);
+
+        const bookedBeds = guestsInRoom[0]?.totalBooked || 0;
+        const availableBeds = room.totalBeds - bookedBeds;
+
+        return {
+          ...room,
+          beds,
+          availableBeds: availableBeds < 0 ? 0 : availableBeds,
+        };
+      })
+    );
+
+    const totalRooms = await GuestRoom.countDocuments({
+      hospital: req.user.hospitalId,
+    });
 
     const paginatedResponse = getPaginatedResponse(
       roomsWithBeds,
@@ -517,7 +885,6 @@ export const checkoutGuest = async (req, res) => {
     );
   }
 };
-
 
 export const checkinGuest = async (req, res) => {
   try {

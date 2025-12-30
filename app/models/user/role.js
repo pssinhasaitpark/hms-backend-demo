@@ -10,9 +10,14 @@ const roleFields = {
   },
   description: { type: String, trim: true },
   permissions: [{ type: String }],
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+  },
 };
 
-const roleSchema = createSchema(roleFields, {}, true);
+const roleSchema = createSchema(roleFields, {});
+roleSchema.index({ hospital: 1, name: 1 }, { unique: true });
 
 export default mongoose.model("Role", roleSchema);
-  

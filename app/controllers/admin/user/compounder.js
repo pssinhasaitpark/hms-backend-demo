@@ -6,16 +6,15 @@ import { getPagination } from "../../../utils/pagination.js";
 import Department from "../../../models/departments/deparments.js";
 import Doctor from "../../../models/user/doctor.js";
 
-
 export const getAllCompounders = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
-    const { search } = req.query; 
+    const { search } = req.query;
+    const hospitalId = req.user._id;
 
- 
-    const query = { status: { $ne: "deleted" } };
+    const query = { status: { $ne: "deleted" }, hospital: hospitalId };
     if (search) {
-      query.name = { $regex: search, $options: "i" }; 
+      query.name = { $regex: search, $options: "i" };
     }
 
     const compounders = await Compounder.find(query)
@@ -46,9 +45,11 @@ export const getCompounderById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateObjectId(id, res, "compounder ID")) return;
+    const hospitalId = req.user._id;
 
     const compounder = await Compounder.findOne({
       _id: id,
+      hospital: hospitalId,
       status: { $ne: "deleted" },
     })
       .populate("role", "name description")
@@ -89,6 +90,7 @@ export const updateCompounder = async (req, res) => {
     const compounder = await Compounder.findOne({
       _id: id,
       status: { $ne: "deleted" },
+      hospital: req.user._id,
     });
 
     if (!compounder) return handleResponse(res, 404, "Compounder not found");
@@ -191,7 +193,12 @@ export const deleteCompounder = async (req, res) => {
     const { id } = req.params;
     if (!validateObjectId(id, res, "compounder ID")) return;
 
-    const compounder = await Compounder.findOne({ _id: id });
+    const hospitalId = req.user._id;
+
+    const compounder = await Compounder.findOne({
+      _id: id,
+      hospital: hospitalId
+    });
     if (!compounder) return handleResponse(res, 404, "Compounder not found");
 
     const deleteCompounder = await Compounder.findByIdAndDelete(id);

@@ -21,7 +21,7 @@ import IssuedToken from "../../models/guest/tokenIssues.js";
 import Package from "../../models/departments/package.js";
 import mongoose from "mongoose";
 import Department from "../../models/departments/deparments.js";
-
+import { withTransaction } from "../../utils/withTransaction.js";
 async function calculateServicesTotal(serviceIds, doctorId) {
   let totalFee = 0;
   let serviceEntries = [];
@@ -74,7 +74,6 @@ async function calculateServicesTotal(serviceIds, doctorId) {
   return { totalFee, serviceEntries, serviceSnapshot };
 }
 
-
 export const getOrCreateMobile = async (phone, frontDeskId) => {
   let mobile = await MobileNumber.findOne({ phone });
 
@@ -83,10 +82,8 @@ export const getOrCreateMobile = async (phone, frontDeskId) => {
     await mobile.save();
   }
 
-  return mobile; // This will always be a valid mobile document
+  return mobile;
 };
-
-
 
 async function handleNewPatient(req, res, frontDeskId, mobile) {
   const {
@@ -103,12 +100,16 @@ async function handleNewPatient(req, res, frontDeskId, mobile) {
     age,
   } = req.body;
 
+  const hospitalId = req.user.hospitalId;
+
   const doctorDoc = await Doctor.findById(doctorId).populate("department");
   if (!doctorDoc) throw new Error("Invalid doctor selected");
 
   const departmentId = doctorDoc.department._id;
 
-  const regFeeDoc = await RegistrationFee.findOne().sort({ updatedAt: -1 });
+  const regFeeDoc = await RegistrationFee.findOne({
+    hospital: hospitalId,
+  }).sort({ updatedAt: -1 });
   const registrationFee = regFeeDoc?.registrationFee || 50;
 
   const opdCharge = doctorDoc.department.opdCharge || 0;
@@ -134,6 +135,8 @@ async function handleNewPatient(req, res, frontDeskId, mobile) {
     paymentType,
     createdBy: frontDeskId,
     visitCount: 1,
+
+    hospital: hospitalId,
   });
 
   patient.lastDoctor = doctorId;
@@ -171,14 +174,33 @@ async function handleNewPatient(req, res, frontDeskId, mobile) {
     opdPaid: true,
     patientType: "NEW",
     createdBy: frontDeskId,
+    hospital: hospitalId,
   });
 
   await visitRecord.save();
 
   if (paymentType === "CASH") {
-    await updateAccountDailySummary(frontDeskId, totalFee, 0, 0, 0, 0, 0);
+    await updateAccountDailySummary(
+      frontDeskId,
+      totalFee,
+      0,
+      0,
+      0,
+      0,
+      0,
+      hospitalId
+    );
   } else {
-    await updateAccountDailySummary(frontDeskId, 0, totalFee, 0, 0, 0, 0);
+    await updateAccountDailySummary(
+      frontDeskId,
+      0,
+      totalFee,
+      0,
+      0,
+      0,
+      0,
+      hospitalId
+    );
   }
 
   const invoice = new Invoice({
@@ -201,6 +223,134 @@ async function handleNewPatient(req, res, frontDeskId, mobile) {
   };
 }
 
+/* 
+transaction manage
+async function handleNewPatient(req, res, frontDeskId, mobile) {
+  return withTransaction(async (session) => {
+    const {
+      patientName,
+      doctor: doctorId,
+      services: serviceIds,
+      notes,
+      paymentType,
+      aadhar,
+      samagra,
+      ayushman,
+      address,
+      gender,
+      age,
+    } = req.body;
+
+    const hospitalId = req.user.hospitalId;
+
+    const doctorDoc = await Doctor.findById(doctorId)
+      .populate("department")
+      .session(session);
+
+    if (!doctorDoc) throw new Error("Invalid doctor selected");
+
+    const departmentId = doctorDoc.department._id;
+
+    const regFeeDoc = await RegistrationFee.findOne({
+      hospital: hospitalId,
+    })
+      .sort({ updatedAt: -1 })
+      .session(session);
+
+    const registrationFee = regFeeDoc?.registrationFee || 0;
+    const opdCharge = doctorDoc.department.opdCharge || 0;
+
+    const {
+      totalFee: serviceTotal,
+      serviceEntries,
+      serviceSnapshot,
+    } = await calculateServicesTotal(serviceIds, doctorId);
+
+    const totalFee = registrationFee + opdCharge + serviceTotal;
+
+    const patient = new Patient({
+      patientName,
+      mobile: mobile._id,
+      aadhar,
+      samagra,
+      ayushman,
+      address,
+      gender,
+      age,
+      paymentType,
+      currentPatientType: "NEW",
+      visitCount: 1,
+      createdBy: frontDeskId,
+      hospital: hospitalId,
+      lastDoctor: doctorId,
+      lastVisitDate: new Date(),
+    });
+
+    await patient.save({ session });
+
+    const visitRecord = new PatientVisitRecords({
+      patient: patient._id,
+      patientSnapshot: {
+        patientName,
+        mobile: mobile.phone,
+        aadhar,
+        samagra,
+        ayushman,
+        address,
+        gender,
+        age,
+      },
+      doctor: doctorId,
+      department: departmentId,
+      service: serviceIds || [],
+      doctorSnapshot: {
+        doctorName: doctorDoc.doctorName,
+        specialization: doctorDoc.specialization,
+      },
+      departmentSnapshot: { departmentName: doctorDoc.department.name },
+      serviceSnapshot,
+      registrationFee,
+      opdCharge,
+      serviceCharge: serviceTotal,
+      totalFee,
+      paymentType,
+      notes,
+      opdPaid: true,
+      patientType: "NEW",
+      createdBy: frontDeskId,
+      hospital: hospitalId,
+    });
+
+    await visitRecord.save({ session });
+
+    await updateAccountDailySummary(
+      frontDeskId,
+      paymentType === "CASH" ? totalFee : 0,
+      paymentType === "ONLINE" ? totalFee : 0,
+      0,
+      0,
+      0,
+      0,
+      hospitalId,
+      session
+    );
+
+    const invoice = new Invoice({
+      patient: patient._id,
+      registrationFee,
+      opdCharge,
+      items: serviceEntries,
+      totalAmount: totalFee,
+      paymentType,
+      patientType: "NEW",
+      createdBy: frontDeskId,
+    });
+
+    await invoice.save({ session });
+
+    return { patient, visitRecord, invoice };
+  });
+} */
 
 async function handleFollowupPatient(req, res, frontDeskId, mobile) {
   const {
@@ -214,6 +364,8 @@ async function handleFollowupPatient(req, res, frontDeskId, mobile) {
     ayushman,
     address,
   } = req.body;
+
+  const hospitalId = req.user.hospitalId;
 
   const patient = await Patient.findById(patientId).populate("mobile");
   if (!patient) throw new Error("Patient not found");
@@ -294,9 +446,27 @@ async function handleFollowupPatient(req, res, frontDeskId, mobile) {
   const finalTotal = opdCharge + serviceTotal;
 
   if (paymentType === "CASH") {
-    await updateAccountDailySummary(frontDeskId, finalTotal, 0, 0, 0, 0, 0);
+    await updateAccountDailySummary(
+      frontDeskId,
+      finalTotal,
+      0,
+      0,
+      0,
+      0,
+      0,
+      hospitalId
+    );
   } else {
-    await updateAccountDailySummary(frontDeskId, 0, finalTotal, 0, 0, 0, 0);
+    await updateAccountDailySummary(
+      frontDeskId,
+      0,
+      finalTotal,
+      0,
+      0,
+      0,
+      0,
+      hospitalId
+    );
   }
 
   const invoice = new Invoice({
@@ -342,6 +512,7 @@ async function handleFollowupPatient(req, res, frontDeskId, mobile) {
     notes,
     patientType: patientTypeForVisit,
     createdBy: frontDeskId,
+    hospital: hospitalId,
   });
 
   await visitRecord.save();
@@ -352,7 +523,6 @@ async function handleFollowupPatient(req, res, frontDeskId, mobile) {
 
   return { patient, visitRecord, invoice };
 }
-
 
 async function handlePrepaidPatient(req, res, frontDeskId, mobile) {
   try {
@@ -370,6 +540,7 @@ async function handlePrepaidPatient(req, res, frontDeskId, mobile) {
       address,
       gender,
     } = req.body;
+    const hospitalId = req.user.hospitalId;
 
     if (!prepaidPackageId) {
       return { error: true, message: "Prepaid package ID is required" };
@@ -427,7 +598,9 @@ async function handlePrepaidPatient(req, res, frontDeskId, mobile) {
     if (!patient) {
       isNewPatient = true;
 
-      const regFeeDoc = await RegistrationFee.findOne().sort({ updatedAt: -1 });
+      const regFeeDoc = await RegistrationFee.findOne({
+        hospital: hospitalId,
+      }).sort({ updatedAt: -1 });
       registrationFee = regFeeDoc?.registrationFee || 50;
 
       totalFee += registrationFee + opdCharge;
@@ -446,6 +619,7 @@ async function handlePrepaidPatient(req, res, frontDeskId, mobile) {
         address,
         gender,
         createdBy: frontDeskId,
+        hospital: hospitalId,
       });
 
       await patient.save();
@@ -515,7 +689,23 @@ async function handlePrepaidPatient(req, res, frontDeskId, mobile) {
     const patientCash = paymentType === "CASH" ? totalFee : 0;
     const patientOnline = paymentType === "ONLINE" ? totalFee : 0;
 
-    await updateAccountDailySummary(frontDeskId, patientCash, patientOnline);
+    // await updateAccountDailySummary(
+    //   frontDeskId,
+    //   patientCash,
+    //   patientOnline,
+    //   hospitalId
+    // );
+
+    await updateAccountDailySummary(
+      frontDeskId,
+      patientCash,
+      patientOnline,
+      0,
+      0,
+      0,
+      0,
+      hospitalId
+    );
 
     const invoice = new Invoice({
       patient: patient._id,
@@ -560,6 +750,7 @@ async function handlePrepaidPatient(req, res, frontDeskId, mobile) {
       notes: "Prepaid package created",
       patientType: isNewPatient ? "NEW" : "PREPAID",
       createdBy: frontDeskId,
+      hospital: hospitalId,
     });
 
     await visitRecord.save();
@@ -570,7 +761,7 @@ async function handlePrepaidPatient(req, res, frontDeskId, mobile) {
   }
 }
 
-export const createOrAddVisit = async (req, res) => {
+ export const createOrAddVisit = async (req, res) => {
   try {
     const frontDeskId = req.user._id;
     const { patientType: requestedPatientType, phone } = req.body;
@@ -622,8 +813,37 @@ export const createOrAddVisit = async (req, res) => {
       error: error.message,
     });
   }
-};
+}; 
 
+// export const createOrAddVisit = async (req, res) => {
+//   try {
+//     const frontDeskId = req.user._id;
+//     const { patientType } = req.body;
+
+//     let result;
+
+//     switch (patientType) {
+//       case "NEW":
+//         result = await handleNewPatient(req, res, frontDeskId, mobile);
+//         break;
+
+//       case "FOLLOWUP":
+//         result = await handleFollowupPatient(req, res, frontDeskId, mobile);
+//         break;
+
+//       case "PREPAID":
+//         result = await handlePrepaidPatient(req, res, frontDeskId, mobile);
+//         break;
+
+//       default:
+//         return handleResponse(res, 400, "Invalid patientType");
+//     }
+
+//     return handleResponse(res, 201, "Success", result);
+//   } catch (error) {
+//     return handleResponse(res, 500, error.message);
+//   }
+// };
 
 export const usePrepaidPackage = async (req, res) => {
   try {
@@ -725,8 +945,7 @@ export const usePrepaidPackage = async (req, res) => {
   }
 };
 
-
-export const getAllPatients = async (req, res) => {
+/* export const getAllPatients = async (req, res) => {
   try {
     const { search, date, department, doctorId } = req.query;
     const { page, limit, skip } = getPagination(req);
@@ -957,13 +1176,268 @@ export const getAllPatients = async (req, res) => {
       error: error.message,
     });
   }
+}; */
+
+export const getAllPatients = async (req, res) => {
+  try {
+    const { search, date, department, doctorId } = req.query;
+    const { page, limit, skip } = getPagination(req);
+
+    const hospitalId = req.user.hospitalId; // Hospital filter
+
+    // ===============================
+    // 📌 SEARCH FILTER
+    // ===============================
+    let mobileFilter = {};
+    let nameFilter = {};
+
+    if (search) {
+      mobileFilter = { phone: { $regex: search, $options: "i" } };
+      nameFilter = { patientName: { $regex: search, $options: "i" } };
+    }
+
+    // Find mobiles matching search
+    const mobiles = await MobileNumber.find(mobileFilter);
+
+    // Find patients matching name search AND hospital
+    const patientsByName = await Patient.find({
+      hospital: hospitalId,
+      ...nameFilter,
+    });
+
+    // Find patients by mobile numbers
+    let patientsByMobile = [];
+    if (mobiles.length) {
+      const mobileIds = mobiles.map((m) => m._id);
+      patientsByMobile = await Patient.find({
+        hospital: hospitalId,
+        mobile: { $in: mobileIds },
+      });
+    }
+
+    const allPatients = [...patientsByName, ...patientsByMobile];
+    const uniquePatientIds = [
+      ...new Set(allPatients.map((p) => p._id.toString())),
+    ];
+
+    if (!uniquePatientIds.length) {
+      return handleResponse(res, 200, "No patients found", {
+        patients: [],
+        page,
+        limit,
+        totalPages: 0,
+        totalItems: 0,
+      });
+    }
+
+    // ===============================
+    // 📌 DATE FILTER
+    // ===============================
+    let dateFilter = {};
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      dateFilter.createdAt = { $gte: start, $lte: end };
+    }
+
+    // ===============================
+    // 📌 DEPARTMENT FILTER
+    // ===============================
+    let departmentFilteredPatientIds = uniquePatientIds;
+
+    if (department) {
+      const visits = await PatientVisitRecords.find({
+        hospital: hospitalId,
+        patient: { $in: uniquePatientIds },
+        department,
+      }).select("patient");
+
+      const filtered = [...new Set(visits.map((v) => v.patient.toString()))];
+      departmentFilteredPatientIds = filtered;
+
+      if (!filtered.length) {
+        return handleResponse(res, 200, "No patients found", {
+          patients: [],
+          page,
+          limit,
+          totalPages: 0,
+          totalItems: 0,
+        });
+      }
+    }
+
+    // ===============================
+    // 📌 DOCTOR FILTER
+    // ===============================
+    let doctorFilteredPatientIds = departmentFilteredPatientIds;
+
+    if (doctorId) {
+      const visits = await PatientVisitRecords.find({
+        hospital: hospitalId,
+        patient: { $in: departmentFilteredPatientIds },
+        doctor: doctorId,
+      }).select("patient");
+
+      const filteredByDoctor = [
+        ...new Set(visits.map((v) => v.patient.toString())),
+      ];
+      doctorFilteredPatientIds = filteredByDoctor;
+
+      if (!filteredByDoctor.length) {
+        return handleResponse(res, 200, "No patients found", {
+          patients: [],
+          page,
+          limit,
+          totalPages: 0,
+          totalItems: 0,
+        });
+      }
+    }
+
+    // ===============================
+    // 📌 FETCH PATIENTS
+    // ===============================
+    const totalItems = await Patient.countDocuments({
+      _id: { $in: doctorFilteredPatientIds },
+      hospital: hospitalId,
+      ...dateFilter,
+    });
+
+    const patients = await Patient.find({
+      _id: { $in: doctorFilteredPatientIds },
+      hospital: hospitalId,
+      ...dateFilter,
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("mobile", "phone _id")
+      .populate("lastDoctor", "doctorName");
+
+    const patientIds = patients.map((p) => p._id);
+
+    // ===============================
+    // 📌 FETCH PREPAID PACKAGES
+    // ===============================
+    const prepaidPackages = await PrepaidPackage.find({
+      hospital: hospitalId,
+      patient: { $in: patientIds },
+    }).populate("package", "name price noOfDays expireOn");
+
+    const prepaidMap = {};
+    prepaidPackages.forEach((pkg) => {
+      prepaidMap[pkg.patient._id.toString()] = pkg;
+    });
+
+    // ===============================
+    // 📌 FETCH LATEST INVOICES
+    // ===============================
+    const invoices = await Invoice.find({
+      // hospital: hospitalId,
+      patient: { $in: patientIds },
+    })
+      .sort({ issuedAt: -1 })
+      .select("patient totalAmount paymentType issuedAt");
+
+    const latestInvoiceMap = {};
+    const latestPaymentMap = {};
+
+    invoices.forEach((inv) => {
+      const pid = inv.patient.toString();
+      if (!latestInvoiceMap[pid]) {
+        latestInvoiceMap[pid] = inv.totalAmount;
+        latestPaymentMap[pid] = inv.paymentType || "N/A";
+      }
+    });
+
+    // ===============================
+    // 📌 GROUP PATIENTS BY MOBILE
+    // ===============================
+    const grouped = {};
+    for (let patient of patients) {
+      const mobilePhone = patient.mobile?.phone || "N/A";
+      if (!grouped[mobilePhone]) grouped[mobilePhone] = [];
+
+      const prepaid = prepaidMap[patient._id.toString()] || null;
+      const latestInvoiceAmount = latestInvoiceMap[patient._id.toString()] || 0;
+      const latestPaymentMethod =
+        latestPaymentMap[patient._id.toString()] || "N/A";
+
+      const latestVisit = await PatientVisitRecords.findOne({
+        hospital: hospitalId,
+        patient: patient._id,
+      })
+        .sort({ visitDate: -1 })
+        .populate("department", "departmentName");
+
+      const latestDepartment =
+        latestVisit?.departmentSnapshot?.departmentName || "N/A";
+
+      grouped[mobilePhone].push({
+        ...patient.toObject(),
+        mobileId: patient.mobile?._id,
+        prepaidPackage: prepaid
+          ? {
+              id: prepaid._id,
+              packageId: prepaid.packageId,
+              packageName: prepaid.package?.name,
+              totalVisits: prepaid.totalVisits,
+              usedVisits: prepaid.usedVisits,
+              totalFee: prepaid.totalFee,
+              paymentType: prepaid.paymentType,
+              startDate: prepaid.startDate,
+              expireOn: prepaid.expireOn,
+            }
+          : null,
+        latestInvoiceAmount,
+        latestPaymentMethod,
+        latestDepartment,
+      });
+    }
+
+    // Sort each mobile group by createdAt
+    Object.keys(grouped).forEach((phone) => {
+      grouped[phone].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+    });
+
+    // ===============================
+    // STRUCTURE FINAL RESPONSE
+    // ===============================
+    let result = Object.keys(grouped)
+      .map((phone) => ({
+        mobile: phone,
+        mobileId: grouped[phone][0].mobileId,
+        patients: grouped[phone],
+        latestDate: grouped[phone][0].createdAt,
+      }))
+      .sort((a, b) => new Date(b.latestDate) - new Date(a.latestDate));
+
+    result = result.map((item) => {
+      delete item.latestDate;
+      return item;
+    });
+
+    return handleResponse(res, 200, "Patients fetched successfully", {
+      patients: result,
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+    });
+  } catch (error) {
+    console.error("❌ Error in getAllPatients:", error);
+    return handleResponse(res, 500, "Something went wrong", {
+      error: error.message,
+    });
+  }
 };
 
-
-
-export const getAllPatientsForAdmin = async (req, res) => {
+/* export const getAllPatientsForAdmin = async (req, res) => {
   try {
-    const { search, date } = req.query; 
+    const { search, date } = req.query;
     const { page, limit, skip } = getPagination(req);
 
     let mobileFilter = {};
@@ -975,13 +1449,12 @@ export const getAllPatientsForAdmin = async (req, res) => {
       nameFilter = { patientName: { $regex: search, $options: "i" } };
     }
 
-    
     if (date) {
       const parsedDate = new Date(date);
       if (!isNaN(parsedDate.getTime())) {
         dateFilter = {
           createdAt: {
-            $gte: new Date(parsedDate.setHours(0, 0, 0, 0)), 
+            $gte: new Date(parsedDate.setHours(0, 0, 0, 0)),
             $lt: new Date(parsedDate.setHours(23, 59, 59, 999)),
           },
         };
@@ -990,7 +1463,6 @@ export const getAllPatientsForAdmin = async (req, res) => {
       }
     }
 
-  
     const mobiles = await MobileNumber.find(mobileFilter);
     const patientsByName = await Patient.find({ ...nameFilter, ...dateFilter });
 
@@ -999,7 +1471,7 @@ export const getAllPatientsForAdmin = async (req, res) => {
       const mobileIds = mobiles.map((m) => m._id);
       patientsByMobile = await Patient.find({
         mobile: { $in: mobileIds },
-        ...dateFilter, 
+        ...dateFilter,
       });
     }
 
@@ -1030,7 +1502,6 @@ export const getAllPatientsForAdmin = async (req, res) => {
 
     const patientIds = patients.map((p) => p._id);
 
-   
     const prepaidPackages = await PrepaidPackage.find({
       patient: { $in: patientIds },
     }).populate("package", "name price noOfDays expireOn");
@@ -1039,7 +1510,6 @@ export const getAllPatientsForAdmin = async (req, res) => {
     prepaidPackages.forEach((pkg) => {
       prepaidMap[pkg.patient._id.toString()] = pkg;
     });
-
 
     const invoices = await Invoice.find({ patient: { $in: patientIds } })
       .sort({ issuedAt: -1 })
@@ -1055,7 +1525,6 @@ export const getAllPatientsForAdmin = async (req, res) => {
       }
     });
 
-   
     const grouped = {};
     for (let patient of patients) {
       const mobilePhone = patient.mobile?.phone || "N/A";
@@ -1131,15 +1600,199 @@ export const getAllPatientsForAdmin = async (req, res) => {
     });
   }
 };
+ */
 
+export const getAllPatientsForAdmin = async (req, res) => {
+  try {
+    const { search, date } = req.query;
+    const { page, limit, skip } = getPagination(req);
+
+    const hospitalId = req.user._id;
+
+    let mobileFilter = {};
+    let nameFilter = {};
+    let dateFilter = {};
+
+    if (search) {
+      mobileFilter = { phone: { $regex: search, $options: "i" } };
+      nameFilter = { patientName: { $regex: search, $options: "i" } };
+    }
+
+    if (date) {
+      const parsedDate = new Date(date);
+      if (!isNaN(parsedDate.getTime())) {
+        dateFilter = {
+          createdAt: {
+            $gte: new Date(parsedDate.setHours(0, 0, 0, 0)),
+            $lt: new Date(parsedDate.setHours(23, 59, 59, 999)),
+          },
+        };
+      } else {
+        return handleResponse(res, 400, "Invalid date format");
+      }
+    }
+
+    const mobiles = await MobileNumber.find(mobileFilter);
+    const patientsByName = await Patient.find({
+      hospital: hospitalId,
+      ...nameFilter,
+      ...dateFilter,
+    });
+
+    let patientsByMobile = [];
+    if (mobiles.length) {
+      const mobileIds = mobiles.map((m) => m._id);
+      patientsByMobile = await Patient.find({
+        hospital: hospitalId,
+        mobile: { $in: mobileIds },
+        ...dateFilter,
+      });
+    }
+
+    const allPatients = [...patientsByName, ...patientsByMobile];
+    const uniquePatientIds = [
+      ...new Set(allPatients.map((p) => p._id.toString())),
+    ];
+
+    if (!uniquePatientIds.length) {
+      return handleResponse(res, 200, "No patients found", {
+        patients: [],
+        page,
+        limit,
+        totalPages: 0,
+        totalItems: 0,
+      });
+    }
+
+    const totalItems = await Patient.countDocuments({
+      _id: { $in: uniquePatientIds },
+      hospital: hospitalId,
+    });
+
+    const patients = await Patient.find({
+      _id: { $in: uniquePatientIds },
+      hospital: hospitalId,
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("mobile", "phone _id")
+      .populate("lastDoctor", "doctorName");
+
+    const patientIds = patients.map((p) => p._id);
+
+    const prepaidPackages = await PrepaidPackage.find({
+      hospital: hospitalId,
+      patient: { $in: patientIds },
+    }).populate("package", "name price noOfDays expireOn");
+
+    const prepaidMap = {};
+    prepaidPackages.forEach((pkg) => {
+      prepaidMap[pkg.patient._id.toString()] = pkg;
+    });
+
+    const invoices = await Invoice.find({
+      hospital: hospitalId,
+      patient: { $in: patientIds },
+    })
+      .sort({ issuedAt: -1 })
+      .select("patient totalAmount paymentType issuedAt");
+
+    const latestInvoiceMap = {};
+    const latestPaymentMap = {};
+    invoices.forEach((inv) => {
+      const pid = inv.patient.toString();
+      if (!latestInvoiceMap[pid]) {
+        latestInvoiceMap[pid] = inv.totalAmount;
+        latestPaymentMap[pid] = inv.paymentType || "N/A";
+      }
+    });
+
+    const grouped = {};
+    for (let patient of patients) {
+      const mobilePhone = patient.mobile?.phone || "N/A";
+      if (!grouped[mobilePhone]) grouped[mobilePhone] = [];
+
+      const prepaid = prepaidMap[patient._id.toString()] || null;
+      const latestInvoiceAmount = latestInvoiceMap[patient._id.toString()] || 0;
+      const latestPaymentMethod =
+        latestPaymentMap[patient._id.toString()] || "N/A";
+
+      const latestVisit = await PatientVisitRecords.findOne({
+        hospital: hospitalId,
+        patient: patient._id,
+      })
+        .sort({ visitDate: -1 })
+        .populate("department", "departmentName");
+
+      const latestDepartment = latestVisit?.department?.departmentName || "N/A";
+
+      grouped[mobilePhone].push({
+        ...patient.toObject(),
+        mobileId: patient.mobile?._id,
+        prepaidPackage: prepaid
+          ? {
+              id: prepaid._id,
+              packageId: prepaid.packageId,
+              packageName: prepaid.package?.name,
+              totalVisits: prepaid.totalVisits,
+              usedVisits: prepaid.usedVisits,
+              totalFee: prepaid.totalFee,
+              paymentType: prepaid.paymentType,
+              startDate: prepaid.startDate,
+              expireOn: prepaid.expireOn,
+            }
+          : null,
+        latestInvoiceAmount,
+        latestPaymentMethod,
+        latestDepartment,
+      });
+    }
+
+    Object.keys(grouped).forEach((phone) => {
+      grouped[phone].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+    });
+
+    let result = Object.keys(grouped)
+      .map((phone) => ({
+        mobile: phone,
+        mobileId: grouped[phone][0].mobileId,
+        patients: grouped[phone],
+        latestDate: grouped[phone][0].createdAt,
+      }))
+      .sort((a, b) => new Date(b.latestDate) - new Date(a.latestDate));
+
+    result = result.map((item) => {
+      delete item.latestDate;
+      return item;
+    });
+
+    return handleResponse(res, 200, "Patients fetched successfully", {
+      patients: result,
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+    });
+  } catch (error) {
+    console.error("❌ Error in getAllPatientsForAdmin:", error);
+    return handleResponse(res, 500, "Something went wrong", {
+      error: error.message,
+    });
+  }
+};
 
 export const getPatientById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) return handleResponse(res, 400, "Patient ID is required");
+    const hospitalId = req.user.hospitalId;
 
     const patient = await Patient.findOne({
       $or: [{ _id: id }, { patientId: id }],
+      hospital: hospitalId,
     })
       .populate("mobile", "phone")
       .populate("lastDoctor", "doctorName");
@@ -1244,6 +1897,7 @@ export const getPatientById = async (req, res) => {
 
     const visitRecords = await PatientVisitRecords.find({
       patient: patient._id,
+      hospital: hospitalId,
     })
       .sort({ visitDate: -1 })
       .populate("doctor", "doctorName specialization")
@@ -1378,7 +2032,7 @@ export const getPatientVisitsByMobileId = async (req, res) => {
 export const getAllDoctorsWithActiveServices = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
-
+    const hospitalId = req.user.hospitalId;
     const today = new Date();
     const dayNames = [
       "Sunday",
@@ -1407,6 +2061,7 @@ export const getAllDoctorsWithActiveServices = async (req, res) => {
 
     const doctors = await Doctor.find({
       _id: { $in: availableTodayDoctorIds },
+      hospital: hospitalId,
       status: { $ne: "deleted" },
     })
       .sort({ isAvailable: -1, createdAt: -1 })
@@ -1418,7 +2073,10 @@ export const getAllDoctorsWithActiveServices = async (req, res) => {
 
     const doctorIds = doctors.map((doc) => doc._id.toString());
 
-    const services = await DoctorService.find({ doctor: { $in: doctorIds } })
+    const services = await DoctorService.find({
+      doctor: { $in: doctorIds },
+      // hospital: hospitalId,
+    })
       .populate("service", "name description charge")
       .lean();
 
@@ -1493,9 +2151,410 @@ export const getAllDoctorsWithActiveServices = async (req, res) => {
   }
 };
 
+/* export const getTodayFrontdeskReport = async (req, res) => {
+  try {
+    const frontdeskId = req.user._id;
+    const hospitalId = req.user.hospitalId;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    console.log("todayStart===", todayStart);
+    console.log("todayEnd===", todayEnd);
+    console.log("frontdeskId====", frontdeskId);
+
+    // const visits = await PatientVisitRecords.aggregate([
+    //   {
+    //     $match: {
+    //       createdBy: frontdeskId,
+    //       // hospital: hospitalId,
+    //       visitDate: { $gte: todayStart, $lte: todayEnd },
+    //     },
+    //   },
+    //   {
+    //     $group: {
+    //       _id: "$createdBy",
+    //       totalPatients: { $sum: 1 },
+    //       newPatients: {
+    //         $sum: {
+    //           $cond: [{ $eq: ["$patientType", "NEW"] }, 1, 0],
+    //         },
+    //       },
+    //       followupPatients: {
+    //         $sum: {
+    //           $cond: [{ $eq: ["$patientType", "FOLLOWUP"] }, 1, 0],
+    //         },
+    //       },
+    //       prepaidPatients: {
+    //         $sum: {
+    //           $cond: [{ $eq: ["$patientType", "PREPAID"] }, 1, 0],
+    //         },
+    //       },
+    //       regularPatients: {
+    //         $sum: {
+    //           $cond: [{ $eq: ["$patientType", "REGULAR"] }, 1, 0],
+    //         },
+    //       },
+    //       totalRevenue: { $sum: "$totalFee" },
+    //     },
+    //   },
+    //   {
+    //     $project: {
+    //       frontdeskId: "$_id",
+    //       totalPatients: 1,
+    //       newPatients: 1,
+    //       followupPatients: 1,
+    //       prepaidPatients: 1,
+    //       regularPatients: 1,
+    //       totalRevenue: 1,
+    //     },
+    //   },
+    // ]);
+
+    const visits = await PatientVisitRecords.aggregate([
+      {
+        $match: {
+          createdBy: frontdeskId,
+          visitDate: { $gte: todayStart, $lte: todayEnd },
+        },
+      },
+      {
+        $group: {
+          _id: "$createdBy",
+          totalPatients: { $sum: 1 },
+          newPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "NEW"] }, 1, 0],
+            },
+          },
+          followupPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "FOLLOWUP"] }, 1, 0],
+            },
+          },
+          prepaidPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "PREPAID"] }, 1, 0],
+            },
+          },
+          regularPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "REGULAR"] }, 1, 0],
+            },
+          },
+          totalRevenue: { $sum: "$totalFee" },
+        },
+      },
+      {
+        $project: {
+          frontdeskId: "$_id",
+          totalPatients: 1,
+          newPatients: 1,
+          followupPatients: 1,
+          prepaidPatients: 1,
+          regularPatients: 1,
+          totalRevenue: 1,
+        },
+      },
+    ]);
+
+    console.log("visits===", visits);
+
+    const newPatientsToday = await Patient.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: todayStart, $lte: todayEnd },
+          hospital: hospitalId,
+        },
+      },
+      {
+        $group: {
+          _id: "$createdBy",
+          newPatientsCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    console.log("newPatientsToday===", newPatientsToday);
+
+    const guestRevenue = await Guest.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: todayStart, $lte: todayEnd },
+          hospital: hospitalId,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalGuestRevenue: { $sum: "$totalPrice" },
+        },
+      },
+    ]);
+
+    const totalGuestRevenue =
+      guestRevenue.length > 0 ? guestRevenue[0].totalGuestRevenue : 0;
+
+    const canteenRevenue = await IssuedToken.aggregate([
+      {
+        $match: {
+          issuedAt: { $gte: todayStart, $lte: todayEnd },
+          hospital: hospitalId,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalCanteenRevenue: { $sum: "$totalAmount" },
+        },
+      },
+    ]);
+
+    const totalCanteenRevenue =
+      canteenRevenue.length > 0 ? canteenRevenue[0].totalCanteenRevenue : 0;
+
+    if (visits.length === 0) {
+      return handleResponse(
+        res,
+        200,
+        "No visits found for today, but here's the revenue.",
+        [
+          {
+            frontdeskId: null,
+            totalPatients: 0,
+            newPatients: 0,
+            followupPatients: 0,
+            prepaidPatients: 0,
+            regularPatients: 0,
+            totalRevenue: totalGuestRevenue + totalCanteenRevenue,
+            guestRevenue: totalGuestRevenue,
+            canteenRevenue: totalCanteenRevenue,
+            TotalPatientsCreatedToday: 0,
+          },
+        ]
+      );
+    }
+
+    const report = visits.map((visit) => {
+      const newPatientToday = newPatientsToday.find(
+        (p) => p._id.toString() === visit.frontdeskId.toString()
+      );
+
+      const newPatientsCountToday = newPatientToday
+        ? newPatientToday.newPatientsCount
+        : 0;
+
+      return {
+        frontdeskId: visit.frontdeskId,
+        totalPatients: visit.totalPatients,
+        newPatients: visit.newPatients,
+        followupPatients: visit.followupPatients,
+        prepaidPatients: visit.prepaidPatients,
+        regularPatients: visit.regularPatients,
+
+        totalRevenue:
+          visit.totalRevenue + totalGuestRevenue + totalCanteenRevenue,
+
+        guestRevenue: totalGuestRevenue,
+        canteenRevenue: totalCanteenRevenue,
+
+        TotalPatientsCreatedToday: newPatientsCountToday,
+      };
+    });
+
+    return handleResponse(
+      res,
+      200,
+      "Today's frontdesk report generated",
+      report
+    );
+  } catch (error) {
+    console.error("Error generating report:", error);
+    return handleResponse(
+      res,
+      500,
+      "Internal server error while generating report."
+    );
+  }
+}; */
+
 export const getTodayFrontdeskReport = async (req, res) => {
   try {
     const frontdeskId = req.user._id;
+    const hospitalId = req.user.hospitalId;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const visits = await PatientVisitRecords.aggregate([
+      {
+        $match: {
+          // createdBy: frontdeskId,
+          createdBy: new mongoose.Types.ObjectId(frontdeskId),
+          visitDate: { $gte: todayStart, $lte: todayEnd },
+        },
+      },
+      {
+        $group: {
+          _id: "$createdBy",
+          totalPatients: { $sum: 1 },
+          newPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "NEW"] }, 1, 0],
+            },
+          },
+          followupPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "FOLLOWUP"] }, 1, 0],
+            },
+          },
+          prepaidPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "PREPAID"] }, 1, 0],
+            },
+          },
+          regularPatients: {
+            $sum: {
+              $cond: [{ $eq: ["$patientType", "REGULAR"] }, 1, 0],
+            },
+          },
+          totalRevenue: { $sum: "$totalFee" },
+        },
+      },
+      {
+        $project: {
+          frontdeskId: "$_id",
+          totalPatients: 1,
+          newPatients: 1,
+          followupPatients: 1,
+          prepaidPatients: 1,
+          regularPatients: 1,
+          totalRevenue: 1,
+        },
+      },
+    ]);
+
+    const newPatientsToday = await Patient.aggregate([
+      {
+        $match: { createdAt: { $gte: todayStart, $lte: todayEnd } },
+      },
+      {
+        $group: {
+          _id: "$createdBy",
+          newPatientsCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const guestRevenue = await Guest.aggregate([
+      {
+        $match: {
+          hospital: new mongoose.Types.ObjectId(hospitalId),
+          createdAt: { $gte: todayStart, $lte: todayEnd },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalGuestRevenue: { $sum: "$totalPrice" },
+        },
+      },
+    ]);
+
+    const totalGuestRevenue =
+      guestRevenue.length > 0 ? guestRevenue[0].totalGuestRevenue : 0;
+
+    const canteenRevenue = await IssuedToken.aggregate([
+      {
+        $match: {
+          issuedAt: { $gte: todayStart, $lte: todayEnd },
+          hospital: new mongoose.Types.ObjectId(hospitalId),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalCanteenRevenue: { $sum: "$totalAmount" },
+        },
+      },
+    ]);
+
+    const totalCanteenRevenue =
+      canteenRevenue.length > 0 ? canteenRevenue[0].totalCanteenRevenue : 0;
+
+    if (visits.length === 0) {
+      return handleResponse(
+        res,
+        200,
+        "No visits found for today, but here's the revenue.",
+        [
+          {
+            frontdeskId: null,
+            totalPatients: 0,
+            newPatients: 0,
+            followupPatients: 0,
+            prepaidPatients: 0,
+            regularPatients: 0,
+            totalRevenue: totalGuestRevenue + totalCanteenRevenue,
+            guestRevenue: totalGuestRevenue,
+            canteenRevenue: totalCanteenRevenue,
+            TotalPatientsCreatedToday: 0,
+          },
+        ]
+      );
+    }
+
+    const report = visits.map((visit) => {
+      const newPatientToday = newPatientsToday.find(
+        (p) => p._id.toString() === visit.frontdeskId.toString()
+      );
+
+      const newPatientsCountToday = newPatientToday
+        ? newPatientToday.newPatientsCount
+        : 0;
+
+      return {
+        frontdeskId: visit.frontdeskId,
+        totalPatients: visit.totalPatients,
+        newPatients: visit.newPatients,
+        followupPatients: visit.followupPatients,
+        prepaidPatients: visit.prepaidPatients,
+        regularPatients: visit.regularPatients,
+
+        totalRevenue:
+          visit.totalRevenue + totalGuestRevenue + totalCanteenRevenue,
+
+        guestRevenue: totalGuestRevenue,
+        canteenRevenue: totalCanteenRevenue,
+
+        TotalPatientsCreatedToday: newPatientsCountToday,
+      };
+    });
+
+    return handleResponse(
+      res,
+      200,
+      "Today's frontdesk report generated",
+      report
+    );
+  } catch (error) {
+    console.error("Error generating report:", error);
+    return handleResponse(
+      res,
+      500,
+      "Internal server error while generating report."
+    );
+  }
+};
+
+/* export const getTodayFrontdeskReport = async (req, res) => {
+  try {
+    const frontdeskId = req.user._id;
+    const hospitalId = req.user.hospitalId;
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -1550,7 +2609,6 @@ export const getTodayFrontdeskReport = async (req, res) => {
       },
     ]);
 
-
     const newPatientsToday = await Patient.aggregate([
       {
         $match: { createdAt: { $gte: todayStart, $lte: todayEnd } },
@@ -1579,7 +2637,6 @@ export const getTodayFrontdeskReport = async (req, res) => {
 
     const totalGuestRevenue =
       guestRevenue.length > 0 ? guestRevenue[0].totalGuestRevenue : 0;
-  
 
     const canteenRevenue = await IssuedToken.aggregate([
       {
@@ -1598,23 +2655,26 @@ export const getTodayFrontdeskReport = async (req, res) => {
     const totalCanteenRevenue =
       canteenRevenue.length > 0 ? canteenRevenue[0].totalCanteenRevenue : 0;
 
-
-  
     if (visits.length === 0) {
-      return handleResponse(res, 200, "No visits found for today, but here's the revenue.", [
-        {
-          frontdeskId: null,
-          totalPatients: 0,
-          newPatients: 0,
-          followupPatients: 0,
-          prepaidPatients: 0,
-          regularPatients: 0,
-          totalRevenue: totalGuestRevenue + totalCanteenRevenue,
-          guestRevenue: totalGuestRevenue,
-          canteenRevenue: totalCanteenRevenue,
-          TotalPatientsCreatedToday: 0,
-        }
-      ]);
+      return handleResponse(
+        res,
+        200,
+        "No visits found for today, but here's the revenue.",
+        [
+          {
+            frontdeskId: null,
+            totalPatients: 0,
+            newPatients: 0,
+            followupPatients: 0,
+            prepaidPatients: 0,
+            regularPatients: 0,
+            totalRevenue: totalGuestRevenue + totalCanteenRevenue,
+            guestRevenue: totalGuestRevenue,
+            canteenRevenue: totalCanteenRevenue,
+            TotalPatientsCreatedToday: 0,
+          },
+        ]
+      );
     }
 
     const report = visits.map((visit) => {
@@ -1658,7 +2718,7 @@ export const getTodayFrontdeskReport = async (req, res) => {
       "Internal server error while generating report."
     );
   }
-};
+};  */
 
 export const updatePatientDetails = async (req, res) => {
   try {
@@ -1716,24 +2776,29 @@ export const updatePatientDetails = async (req, res) => {
   }
 };
 
-
 export const getAllFees = async (req, res) => {
   try {
     const { departmentId, doctorId, patientId } = req.query;
+    const hospitalId = req.user?.hospitalId;
 
     if (!validateObjectId(departmentId, res, "department id")) return;
 
-    // Fetch latest registration fee
-    const registrationFeeData = await RegistrationFee.findOne().sort({
+    const registrationFeeData = await RegistrationFee.findOne({
+      hospital: hospitalId,
+    }).sort({
       updatedAt: -1,
     });
+
     const registrationFee = registrationFeeData
       ? registrationFeeData.registrationFee
       : 0;
 
     // Fetch department OPD charge
     let opdCharge = 0;
-    const department = await Department.findById(departmentId);
+    const department = await Department.findById({
+      _id: departmentId,
+      hospital: hospitalId,
+    });
     if (department) opdCharge = department.opdCharge || 0;
 
     // If both doctorId and patientId are provided → check last paid OPD visit
@@ -1746,6 +2811,7 @@ export const getAllFees = async (req, res) => {
       const lastPaidOpdVisit = await PatientVisitRecords.findOne({
         patient: patientId,
         doctor: doctorId,
+        hospital: hospitalId,
         opdPaid: true,
       }).sort({ visitDate: -1 });
 
@@ -1786,7 +2852,6 @@ export const getAllFees = async (req, res) => {
     return handleResponse(res, 500, error.message || "Internal Server Error");
   }
 };
-
 
 export const getPrepaidPackagesByPatient = async (req, res) => {
   try {
@@ -1880,5 +2945,3 @@ export const getPrepaidPackagesByPatient = async (req, res) => {
     });
   }
 };
-
-

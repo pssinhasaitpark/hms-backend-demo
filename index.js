@@ -17,10 +17,10 @@ const port = process.env.PORT || 0;
 app.use(
   cors({
     origin: [
-      "http://192.168.0.141:5173",
+      "http://192.168.0.113:5173",
       "https://madhav-web.parkhya.co.in",
       "https://madhav-admin.parkhya.co.in",
-      "http://192.168.0.141:5174",
+      "http://192.168.0.117:5173",
       "http://192.168.0.162:5173",
       "http://192.168.0.146:5173",
       "https://hms-admin-demo.vercel.app",

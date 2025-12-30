@@ -30,6 +30,8 @@ import reportsRoutes from "../routes/reports/reports.js";
 import superAdminAuthRoutes from "../routes/super-admin/auth.js";
 import hospitalRoutes from "../routes/hospitals/hospitals.js";
 
+import contactRoutes from "../routes/contactus/constactus.js";
+
 export default (app) => {
   app.use("/api/v1/auth", staffAuthPublicRoutes);
   //frontdesk
@@ -66,4 +68,6 @@ export default (app) => {
   //super admin routes
   app.use("/api/v1/super-admin/auth", superAdminAuthRoutes);
   app.use("/api/v1/hospital", hospitalRoutes);
+
+  app.use("/api/v1/contact", contactRoutes);
 };

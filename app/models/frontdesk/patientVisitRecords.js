@@ -83,6 +83,11 @@ const patientVisitRecordsSchemaFields = {
     required: true,
   },
   opdPaid: { type: Boolean, default: true },
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+  },
 };
 
 const patientVisitRecordsSchema = createSchema(

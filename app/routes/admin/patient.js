@@ -7,9 +7,13 @@ import {
   updatePatientDetails,
   getAllPatients,
 } from "../../controllers/frontdesk/patients.js";
-import { verifyToken, isAdmin } from "../../middlewares/jwtAuth.js";
+import {
+  verifyToken,
+  isAdmin,
+  isHospitalAdmin,
+} from "../../middlewares/jwtAuth.js";
 const router = express.Router();
-router.use(verifyToken, isAdmin);
+router.use(verifyToken, isHospitalAdmin);
 
 router.get("/details/:id", getPatientById);
 

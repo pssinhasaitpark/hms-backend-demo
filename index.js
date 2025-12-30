@@ -27,6 +27,7 @@ app.use(
       "https://hms-super-admin.vercel.app",
       "https://hms-admin-demo-8aps.vercel.app",
       "https://hms-web-app-demo.vercel.app",
+      "https://hms-landing-one.vercel.app",
       "http://localhost:5173",
       "http://localhost:5174",
       "http://192.168.0.139:5173",

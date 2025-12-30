@@ -4,7 +4,6 @@ import { handleResponse } from "../../utils/responseHandler.js";
 import IssuedToken from "../../models/guest/tokenIssues.js";
 import { updateAccountDailySummary } from "../../utils/accountDailySummary.js";
 
-
 function timeStringToMinutes(timeStr) {
   const [time, modifier] = timeStr.split(" ");
   let [hours, minutes] = time.split(":").map(Number);
@@ -18,12 +17,25 @@ function timeStringToMinutes(timeStr) {
 export const createTokenTemplate = async (req, res) => {
   try {
     const { mealType, amount, validFrom, validTo, remarks } = req.body;
-
+    const hospitalId = req.user._id;
     if (!mealType || !amount || !validFrom || !validTo) {
       return handleResponse(
         res,
         400,
         "Meal Type, Amount, ValidFrom and ValidTo are required."
+      );
+    }
+
+    const existing = await TokenTemplate.findOne({
+      hospital: hospitalId,
+      mealType: { $regex: `^${mealType}$`, $options: "i" },
+    });
+
+    if (existing) {
+      return handleResponse(
+        res,
+        400,
+        "A token template with this meal type already exists for this hospital."
       );
     }
 
@@ -33,7 +45,7 @@ export const createTokenTemplate = async (req, res) => {
       validFrom,
       validTo,
       remarks: remarks || null,
-      createdBy: req.user._id,
+      hospital: hospitalId,
     });
 
     await tokenTemplate.save();
@@ -50,13 +62,17 @@ export const createTokenTemplate = async (req, res) => {
   }
 };
 
-
 export const getTokenTemplates = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
     const { search } = req.query;
 
-    let query = {};
+    // const hospitalId = req.user._id;
+
+    const hospitalId =
+      req.user.role === "hospital_admin" ? req.user._id : req.user.hospitalId;
+
+    let query = { hospital: hospitalId };
 
     if (search) {
       query.mealType = { $regex: search, $options: "i" };
@@ -91,7 +107,12 @@ export const getTokenTemplates = async (req, res) => {
 export const getTokenTemplateById = async (req, res) => {
   try {
     const { id } = req.params;
-    const tokenTemplate = await TokenTemplate.findById(id);
+    const hospitalId = req.user._id;
+
+    const tokenTemplate = await TokenTemplate.findOne({
+      _id: id,
+      hospital: hospitalId,
+    });
 
     if (!tokenTemplate) {
       return handleResponse(res, 404, "Token Template not found.");
@@ -109,13 +130,11 @@ export const getTokenTemplateById = async (req, res) => {
   }
 };
 
-
 export const updateTokenTemplate = async (req, res) => {
   try {
     const { id } = req.params;
     const { mealType, amount, validFrom, validTo, remarks } = req.body;
 
- 
     if (
       !mealType &&
       !amount &&
@@ -130,6 +149,22 @@ export const updateTokenTemplate = async (req, res) => {
       );
     }
 
+    if (mealType) {
+      const duplicate = await TokenTemplate.findOne({
+        _id: { $ne: id },
+        hospital: req.user._id,
+        mealType: { $regex: `^${mealType}$`, $options: "i" },
+      });
+
+      if (duplicate) {
+        return handleResponse(
+          res,
+          400,
+          "A token template with this meal type already exists for this hospital."
+        );
+      }
+    }
+
     const updateData = {};
 
     if (mealType) updateData.mealType = mealType;
@@ -138,8 +173,8 @@ export const updateTokenTemplate = async (req, res) => {
     if (validTo) updateData.validTo = validTo;
     if (remarks !== undefined) updateData.remarks = remarks;
 
-    const updatedTokenTemplate = await TokenTemplate.findByIdAndUpdate(
-      id,
+    const updatedTokenTemplate = await TokenTemplate.findOneAndUpdate(
+      { _id: id, hospital: req.user._id },
       updateData,
       { new: true }
     );
@@ -164,7 +199,11 @@ export const deleteTokenTemplate = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedTokenTemplate = await TokenTemplate.findByIdAndDelete(id);
+    const deletedTokenTemplate = await TokenTemplate.findOneAndDelete({
+      _id: id,
+      hospital: req.user._id,
+    });
+
     if (!deletedTokenTemplate) {
       return handleResponse(res, 404, "Token Template not found.");
     }
@@ -179,7 +218,7 @@ export const deleteTokenTemplate = async (req, res) => {
 export const issueToken = async (req, res) => {
   try {
     const { template, quantity, paymentType } = req.body;
-
+    const hospitalId = req.user.hospitalId;
     if (!template || !quantity || !paymentType) {
       return handleResponse(
         res,
@@ -197,7 +236,6 @@ export const issueToken = async (req, res) => {
       return handleResponse(res, 404, "TokenTemplate not found");
     }
 
- 
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const validFromMinutes = timeStringToMinutes(tokenTemplate.validFrom);
@@ -211,7 +249,6 @@ export const issueToken = async (req, res) => {
       );
     }
 
-
     const unitPrice = tokenTemplate.amount;
     const totalAmount = unitPrice * quantity;
 
@@ -222,7 +259,8 @@ export const issueToken = async (req, res) => {
       0,
       0,
       paymentType === "cash" ? totalAmount : 0,
-      paymentType === "online" ? totalAmount : 0
+      paymentType === "online" ? totalAmount : 0,
+      hospitalId
     );
 
     const newIssuedToken = new IssuedToken({
@@ -232,8 +270,9 @@ export const issueToken = async (req, res) => {
       totalAmount,
       mealType: tokenTemplate.mealType,
       paymentType,
-      remarks: tokenTemplate.remarks, 
+      remarks: tokenTemplate.remarks,
       createdBy: req.user._id,
+      hospital: hospitalId,
     });
 
     await newIssuedToken.save();
@@ -250,13 +289,12 @@ export const issueToken = async (req, res) => {
   }
 };
 
-
 export const getAllIssuedTokens = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
     const { search } = req.query;
 
-    let filter = {};
+    let filter = { hospital: req.user.hospitalId };
     if (search) {
       filter = {
         $or: [{ mealType: { $regex: search, $options: "i" } }],

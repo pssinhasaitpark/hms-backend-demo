@@ -7,13 +7,15 @@ import {
   deletePackage,
 } from "../../controllers/admin/departments/package.js";
 
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
-
+import {
+  isAdmin,
+  isHospitalAdmin,
+  verifyToken,
+} from "../../middlewares/jwtAuth.js";
 
 const router = express.Router();
 
-router.use(verifyToken, isAdmin);
-
+router.use(verifyToken, isHospitalAdmin);
 
 router.post("/", createPackage);
 

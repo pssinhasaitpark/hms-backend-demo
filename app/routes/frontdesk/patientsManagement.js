@@ -15,6 +15,10 @@ import { getServices } from "../../controllers/admin/departments/services.js";
 import { getPackages } from "../../controllers/admin/departments/package.js";
 const router = express.Router();
 
+router.get("/services", verifyToken, getServices);
+
+router.use(verifyToken, isFrontDesk);
+
 router.get("/patients/details/:id", getPatientById);
 
 router.get(
@@ -32,9 +36,7 @@ router.get("/doctors", getAllDoctorsWithActiveServices);
 
 router.get("/charges", getAllFees);
 
-router.get("/services", getServices);
-
-router.use(verifyToken, isFrontDesk);
+// router.use(verifyToken, isFrontDesk);
 
 router.get("/today-report", getTodayFrontdeskReport);
 

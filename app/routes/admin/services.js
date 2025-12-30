@@ -6,13 +6,13 @@ import {
   updateService,
     deleteService,
   updateServiceStatus
-} from "../../controllers/admin/departments/services.js"; // Adjust path
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
+} from "../../controllers/admin/departments/services.js"; 
+import {  isHospitalAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
 
 const router = express.Router();
 
 
-router.use(verifyToken, isAdmin);
+router.use(verifyToken, isHospitalAdmin);
 
 
 router.post("/", createService);

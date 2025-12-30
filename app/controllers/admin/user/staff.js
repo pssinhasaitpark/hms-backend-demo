@@ -5,8 +5,158 @@ import { validateObjectId } from "../../../utils/helper.js";
 import { getPagination } from "../../../utils/pagination.js";
 import Compounder from "../../../models/user/compounder.js";
 
-
 export const registerStaff = async (req, res) => {
+  try {
+    const {
+      name,
+      phone,
+      password,
+      roleId,
+      monthlySalary,
+      weekOffDay,
+      username,
+      email,
+      serviceCharge,
+      doctors = [],
+      departments = [],
+    } = req.body;
+
+    const role = await Role.findOne({
+      _id: roleId,
+      hospital: req.user._id,
+    });
+
+    if (!role) {
+      return handleResponse(
+        res,
+        403,
+        "Invalid role or role does not belong to this hospital"
+      );
+    }
+
+    if (role.name.toUpperCase() === "COMPOUNDER") {
+      const existingCompounder = await Compounder.findOne({
+        $or: [{ phone }],
+      });
+      if (existingCompounder) {
+        return handleResponse(
+          res,
+          400,
+          "Compounder with this phone number already exists"
+        );
+      }
+
+      if (departments.length > 0) {
+        const validDepartments = await Department.find({
+          _id: { $in: departments },
+          status: "active",
+        });
+
+        if (validDepartments.length !== departments.length) {
+          const validIds = validDepartments.map((d) => d._id.toString());
+          const invalidDeptIds = departments.filter(
+            (id) => !validIds.includes(id.toString())
+          );
+
+          return handleResponse(
+            res,
+            400,
+            `Some departments are invalid or inactive: ${invalidDeptIds.join(
+              ", "
+            )}`
+          );
+        }
+      }
+
+      if (doctors.length > 0) {
+        const validDoctors = await Doctor.find({
+          _id: { $in: doctors },
+          status: "active",
+        });
+
+        if (validDoctors.length !== doctors.length) {
+          const validIds = validDoctors.map((d) => d._id.toString());
+          const invalidDocIds = doctors.filter(
+            (id) => !validIds.includes(id.toString())
+          );
+
+          return handleResponse(
+            res,
+            400,
+            `Some doctors are invalid or inactive: ${invalidDocIds.join(", ")}`
+          );
+        }
+      }
+
+      const compounder = new Compounder({
+        name,
+        username,
+        email,
+        phone,
+        password,
+        serviceCharge,
+        monthlySalary,
+        role: role._id,
+        doctors,
+        departments,
+        hospital: req.user._id,
+        // createdBy: req.user?._id || null,
+      });
+
+      await compounder.save();
+
+      const populatedCompounder = await Compounder.findById(compounder._id)
+        .populate("role", "name description")
+        .populate("doctors", "doctorName doctorId")
+        .populate("departments", "name departmentId")
+        .lean();
+
+      if (populatedCompounder) delete populatedCompounder.password;
+
+      return handleResponse(
+        res,
+        201,
+        "Compounder registered successfully",
+        populatedCompounder
+      );
+    } else {
+      const existingStaff = await Staff.findOne({ phone });
+      if (existingStaff) {
+        return handleResponse(
+          res,
+          400,
+          "Staff with this phone number already exists"
+        );
+      }
+
+      const staff = new Staff({
+        name,
+        phone,
+        password,
+        monthlySalary,
+        weekOffDay,
+        role: role._id,
+        hospital: req.user._id,
+        createdBy: req.user?._id || null,
+      });
+
+      await staff.save();
+      const { password: _, ...staffData } = staff.toObject();
+
+      return handleResponse(
+        res,
+        201,
+        "Staff registered successfully",
+        staffData
+      );
+    }
+  } catch (error) {
+    console.error("❌ Registration error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+};
+
+/* export const registerStaff = async (req, res) => {
   try {
     const {
       name,
@@ -145,23 +295,24 @@ export const registerStaff = async (req, res) => {
     return handleResponse(res, 500, "Server error", { error: error.message });
   }
 };
-
+ */
 
 export const getAllStaff = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
     const { search } = req.query;
-
     const adminRole = await Role.findOne({ name: "ADMIN" }).lean();
     const adminRoleId = adminRole?._id;
 
     const queryStaff = {
       status: { $ne: "deleted" },
-      role: { $ne: adminRoleId }
+      role: { $ne: adminRoleId },
+      hospital: req.user._id,
     };
 
     const queryCompounder = {
-      status: { $ne: "deleted" }
+      status: { $ne: "deleted" },
+      hospital: req.user._id,
     };
 
     if (search) {
@@ -192,27 +343,30 @@ export const getAllStaff = async (req, res) => {
 
     const totalItems = totalStaff + totalCompounders;
 
-    return handleResponse(res, 200, "Staff and compounders fetched successfully", {
-      staff: combinedList,
-      page,
-      limit,
-      totalPages: Math.ceil(totalItems / limit),
-      totalItems,
-    });
-
+    return handleResponse(
+      res,
+      200,
+      "Staff and compounders fetched successfully",
+      {
+        staff: combinedList,
+        page,
+        limit,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+      }
+    );
   } catch (error) {
     console.error("❌ Get all staff error:", error);
     return handleResponse(res, 500, "Server error", { error: error.message });
   }
 };
 
-
 export const getStaffById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateObjectId(id, res, "staff ID")) return;
 
-    const staff = await Staff.findOne({ _id: id, status: { $ne: "deleted" } })
+    const staff = await Staff.findOne({ _id: id, hospital: req.user._id })
       .populate("role", "name description")
       .lean();
 
@@ -225,7 +379,6 @@ export const getStaffById = async (req, res) => {
   }
 };
 
-
 export const updateStaff = async (req, res) => {
   try {
     const { id } = req.params;
@@ -234,11 +387,9 @@ export const updateStaff = async (req, res) => {
     const { name, phone, password, monthlySalary, roleId, weekOffDay } =
       req.body || {};
 
-
-    let staff = await Staff.findOne({ _id: id, status: { $ne: "deleted" } });
+    let staff = await Staff.findOne({ _id: id, hospital: req.user._id });
 
     if (staff) {
-
       if (phone) {
         const existing = await Staff.findOne({ _id: { $ne: id }, phone });
         if (existing)
@@ -293,7 +444,7 @@ export const updateStaff = async (req, res) => {
   }
 };
 
-export const deleteStaff = async (req, res) => {
+/* export const deleteStaff = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -327,6 +478,47 @@ export const deleteStaff = async (req, res) => {
       res,
       404,
       "No Staff or Compounder found with this ID"
+    );
+  } catch (error) {
+    console.error("❌ Delete error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+};
+ */
+
+export const deleteStaff = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!validateObjectId(id, res, "ID")) return;
+
+    const staff = await Staff.findOneAndDelete({
+      _id: id,
+      hospital: req.user._id,
+    });
+
+    if (staff) {
+      return handleResponse(res, 200, "Staff deleted successfully", staff);
+    }
+
+    const compounder = await Compounder.findOneAndDelete({
+      _id: id,
+      hospital: req.user._id,
+    });
+
+    if (compounder) {
+      return handleResponse(
+        res,
+        200,
+        "Compounder deleted successfully",
+        compounder
+      );
+    }
+
+    return handleResponse(
+      res,
+      404,
+      "No Staff or Compounder found with this ID for this hospital"
     );
   } catch (error) {
     console.error("❌ Delete error:", error);

@@ -55,6 +55,12 @@ const patientFields = {
     type: Date,
     default: null,
   },
+
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true, 
+  },
 };
 
 const patientSchema = createSchema(patientFields, {}, true);

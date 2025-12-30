@@ -3,7 +3,7 @@ import { validateObjectId } from "../../../utils/helper.js";
 import { getPagination } from "../../../utils/pagination.js";
 import { handleResponse } from "../../../utils/responseHandler.js";
 
-export const createRole = async (req, res) => {
+/* export const createRole = async (req, res) => {
   try {
     const { name, description, permissions } = req.body;
 
@@ -41,25 +41,64 @@ export const createRole = async (req, res) => {
 
     return handleResponse(res, 500, "Server error", { error: error.message });
   }
+}; */
+
+export const createRole = async (req, res) => {
+  try {
+    const { name, description, permissions } = req.body;
+    const hospitalId = req.user._id;
+
+    const existingRole = await Role.findOne({
+      name: name.trim().toUpperCase(),
+      hospital: hospitalId,
+    });
+
+    if (existingRole) {
+      return handleResponse(
+        res,
+        400,
+        "Role with this name already exists in your hospital"
+      );
+    }
+
+    const role = await Role.create({
+      name: name.trim().toUpperCase(),
+      description: description?.trim() || "",
+      permissions: permissions || [],
+      hospital: hospitalId,
+    });
+
+    return handleResponse(res, 201, "Role created successfully", { role });
+  } catch (error) {
+    console.error("❌ Role creation error:", error);
+    if (error.code === 11000) {
+      return handleResponse(
+        res,
+        400,
+        "Role with this name already exists in your hospital"
+      );
+    }
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
 };
 
 export const getRoles = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
-    const { search } = req.query; 
+    const { search } = req.query;
 
+    const hospitalId = req.user._id;
 
     const query = {
-      status: { $ne: "deleted" },
+      hospital: hospitalId,
       name: { $ne: "ADMIN" },
     };
 
-  
     if (search) {
-      query.name = { $regex: search, $options: "i" }; 
+      query.name = { $regex: search, $options: "i" };
     }
 
-    const totalItems = await Role.countDocuments(query); 
+    const totalItems = await Role.countDocuments(query);
     const roles = await Role.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -87,7 +126,9 @@ export const getRoleById = async (req, res) => {
 
   if (!validateObjectId(id, res, "role ID")) return;
 
-  const role = await Role.findById(id);
+  const hospitalId = req.user._id;
+
+  const role = await Role.findById({ _id: id, hospital: hospitalId });
   if (!role) return handleResponse(res, 404, "Role not found");
 
   return handleResponse(res, 200, "Role fetched successfully", { role });
@@ -97,8 +138,8 @@ export const updateRole = async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateObjectId(id, res, "role ID")) return;
-
     const { name, description, permissions } = req.body;
+    const hospitalId = req.user._id;
 
     const role = await Role.findById(id);
     if (!role) return handleResponse(res, 404, "Role not found");
@@ -106,6 +147,7 @@ export const updateRole = async (req, res) => {
     if (name) {
       const existing = await Role.findOne({
         name: name.trim().toUpperCase(),
+        hospital: hospitalId,
         _id: { $ne: id },
       });
 
@@ -128,6 +170,7 @@ export const updateRole = async (req, res) => {
   }
 };
 
+/* 
 export const deleteRole = async (req, res) => {
   try {
     const { id } = req.params;
@@ -143,6 +186,27 @@ export const deleteRole = async (req, res) => {
     await role.save();
 
     return handleResponse(res, 200, "Role deleted successfully");
+  } catch (error) {
+    console.error("❌ Delete role error:", error);
+    return handleResponse(res, 500, "Server error", { error: error.message });
+  }
+};
+ */
+
+export const deleteRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateObjectId(id, res, "role ID")) return;
+
+    const role = await Role.findOne({ _id: id, hospital: req.user._id });
+
+    if (!role) {
+      return handleResponse(res, 404, "Role not found");
+    }
+
+    await Role.findByIdAndDelete(id);
+
+    return handleResponse(res, 200, "Role  deleted successfully");
   } catch (error) {
     console.error("❌ Delete role error:", error);
     return handleResponse(res, 500, "Server error", { error: error.message });

@@ -6,20 +6,27 @@ import Services from "../../../models/departments/services.js";
 import { updateStatus } from "../../../utils/updateStatus.js";
 import Doctor from "../../../models/user/doctor.js";
 
-
-
 export const createDepartment = async (req, res) => {
   try {
     const { name, description, services, opdCharge } = req.body;
 
-    const existing = await Department.findOne({ name });
-    if (existing) return handleResponse(res, 400, "Department already exists");
+    const existing = await Department.findOne({
+      name,
+      hospital: req.user._id,
+    });
+    if (existing)
+      return handleResponse(
+        res,  
+        400,
+        "Department already exists in this hospital"
+      );
 
     const department = await Department.create({
       name,
       description,
-      opdCharge: opdCharge ?? 0, // ⭐ Added
-      createdBy: req.user._id,
+      opdCharge: opdCharge ?? 0,
+      // createdBy: req.user._id,
+      hospital: req.user._id,
     });
 
     if (Array.isArray(services) && services.length > 0) {
@@ -29,7 +36,8 @@ export const createDepartment = async (req, res) => {
         const newService = new Services({
           ...service,
           department: department._id,
-          createdBy: req.user._id,
+          // createdBy: req.user._id,
+          hospital: req.user._id,
         });
         await newService.save();
         createdServices.push(newService);
@@ -63,7 +71,7 @@ export const getDepartments = async (req, res) => {
     const { page, limit, skip } = getPagination(req);
     const { search } = req.query;
 
-    const query = { status: { $ne: "deleted" } };
+    const query = { status: { $ne: "deleted" }, hospital: req.user._id };
     if (search) {
       query.name = { $regex: search, $options: "i" };
     }
@@ -102,7 +110,7 @@ export const getDepartmentsWithDoctors = async (req, res) => {
     const { page, limit, skip } = getPagination(req);
     const { search, doctorsIds } = req.query;
 
-    const query = { status: { $ne: "deleted" } };
+    const query = { status: { $ne: "deleted" }, hospital: req.user._id };
 
     if (search) {
       query.name = { $regex: search, $options: "i" };
@@ -112,7 +120,6 @@ export const getDepartmentsWithDoctors = async (req, res) => {
     if (doctorsIds) {
       filteredDoctorIds = doctorsIds.split(",").map((id) => id.trim());
 
-      // Get only departments of these doctors
       const departmentsWithDoctors = await Doctor.find({
         _id: { $in: filteredDoctorIds },
       }).distinct("department");
@@ -130,18 +137,20 @@ export const getDepartmentsWithDoctors = async (req, res) => {
       .skip(skip)
       .limit(limit);
 
-    // Get department IDs
     const departmentIds = departments.map((d) => d._id);
 
-    // Fetch doctors for these departments (only name)
-    const doctorsQuery = { department: { $in: departmentIds } };
+    const doctorsQuery = {
+      department: { $in: departmentIds },
+      hospital: req.user._id,
+    };
     if (filteredDoctorIds.length > 0) {
       doctorsQuery._id = { $in: filteredDoctorIds };
     }
 
-    const doctors = await Doctor.find(doctorsQuery).select("_id doctorName department");
+    const doctors = await Doctor.find(doctorsQuery).select(
+      "_id doctorName department"
+    );
 
-    // Attach doctors' names to departments
     const departmentsWithDoctors = departments.map((dep) => {
       const doctorNames = doctors
         .filter((doc) => doc.department.toString() === dep._id.toString())
@@ -176,7 +185,10 @@ export const getDepartmentById = async (req, res) => {
     const { id } = req.params;
     if (!validateObjectId(id, res, "department ID")) return;
 
-    const department = await Department.findById(id)
+    const department = await Department.findById({
+      _id: id,
+      hospital: req.user._id,
+    })
       .populate("createdBy", "firstName lastName email")
       .populate({
         path: "services",
@@ -197,7 +209,6 @@ export const getDepartmentById = async (req, res) => {
   }
 };
 
-
 export const updateDepartment = async (req, res) => {
   try {
     const { id } = req.params;
@@ -205,7 +216,10 @@ export const updateDepartment = async (req, res) => {
 
     const { name, description, status, services, opdCharge } = req.body;
 
-    const department = await Department.findById(id).populate({
+    const department = await Department.findById({
+      _id: id,
+      hospital: req.user._id,
+    }).populate({
       path: "services",
       select: "serviceId name description charge",
     });
@@ -243,6 +257,7 @@ export const updateDepartment = async (req, res) => {
           const existingService = await Services.findOne({
             _id: serviceData._id,
             department: department._id,
+            hospital: req.user._id,
           });
 
           if (existingService) {
@@ -301,7 +316,10 @@ export const deleteDepartment = async (req, res) => {
     const { id } = req.params;
     if (!validateObjectId(id, res, "department ID")) return;
 
-    const department = await Department.findById(id);
+    const department = await Department.findById({
+      _id: id,
+      hospital: req.user._id,
+    });
 
     if (!department || department.status === "deleted") {
       return handleResponse(res, 404, "Department not found");

@@ -8,7 +8,6 @@ import {
   getPagination,
 } from "../../../utils/pagination.js";
 
-
 export const createPackage = async (req, res) => {
   try {
     const {
@@ -22,6 +21,8 @@ export const createPackage = async (req, res) => {
       department,
     } = req.body;
 
+    const hospitalId = req.user._id;
+
     if (!validateObjectId(department, res, "Department")) return;
     if (createdBy && !validateObjectId(createdBy, res, "CreatedBy")) return;
     if (services && services.length > 0) {
@@ -30,12 +31,15 @@ export const createPackage = async (req, res) => {
       }
     }
 
-    const existingPackage = await Package.findOne({ name });
+    const existingPackage = await Package.findOne({
+      hospital: hospitalId,
+      name: { $regex: `^${name}$`, $options: "i" },
+    });
     if (existingPackage) {
       return handleResponse(
         res,
         400,
-        "A package with this name already exists"
+        "A package with this name already exists for this hospital"
       );
     }
 
@@ -70,7 +74,7 @@ export const createPackage = async (req, res) => {
       price,
       expireOn,
       services,
-      createdBy,
+      hospital: hospitalId,
       department,
     });
 
@@ -103,7 +107,7 @@ export const createPackage = async (req, res) => {
       return handleResponse(
         res,
         400,
-        "A package with this name already exists"
+        "A package with this name already exists for this hospital"
       );
     }
     return handleResponse(res, 500, "Failed to create package", {
@@ -112,14 +116,75 @@ export const createPackage = async (req, res) => {
   }
 };
 
-
-export const getPackages = async (req, res) => {
+/* export const getPackages = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
 
     const { search = "", departmentId } = req.query;
+    const hospitalId = req.user._id;
 
-    const query = {};
+    const query = { hospital: hospitalId };
+
+    if (departmentId) {
+      query.department = departmentId;
+    }
+
+    if (search) {
+      query.$or = [{ name: { $regex: search, $options: "i" } }];
+    }
+
+    const totalPackages = await Package.countDocuments(query);
+
+    let packages = await Package.find(query)
+      .populate({
+        path: "services",
+        select: "_id name",
+      })
+      .populate({
+        path: "department",
+        select: "_id name",
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    if (search) {
+      const regex = new RegExp(search, "i");
+      packages = packages.filter(
+        (pkg) =>
+          regex.test(pkg.name) ||
+          (pkg.department && regex.test(pkg.department.name))
+      );
+    }
+
+    return handleResponse(
+      res,
+      200,
+      "Packages retrieved successfully",
+      getPaginatedResponse(packages, totalPackages, page, limit, "packages")
+    );
+  } catch (error) {
+    return handleResponse(res, 500, "Failed to fetch packages", {
+      error: error.message,
+    });
+  }
+}; */
+
+export const getPackages = async (req, res) => {
+  try {
+    const { page, limit, skip } = getPagination(req);
+    const { search = "", departmentId } = req.query;
+
+    let hospitalId;
+    if (req.user.role === "hospital_admin") {
+      hospitalId = req.user._id;
+    } else if (req.user.role === "FRONTDESK") {
+      hospitalId = req.user.hospitalId;
+    } else {
+      return handleResponse(res, 403, "Unauthorized");
+    }
+
+    const query = { hospital: hospitalId };
 
     if (departmentId) {
       query.department = departmentId;
@@ -166,43 +231,39 @@ export const getPackages = async (req, res) => {
   }
 };
 
-
 export const getPackageById = async (req, res) => {
-    try {
-      const { id } = req.params;
-  
-   
-      if (!validateObjectId(id, res, "Package")) return;
-  
-      const pkg = await Package.findById(id)
-        .populate({
-          path: "services",
-          select: "_id name ",
-        })
-        .populate({
-          path: "department",
-          select: "_id name",
-        })
-      
-  
-      if (!pkg) {
-        return handleResponse(res, 404, "Package not found");
-      }
-  
+  try {
+    const { id } = req.params;
+    const hospitalId = req.user._id;
+    if (!validateObjectId(id, res, "Package")) return;
 
-      return handleResponse(res, 200, "Package retrieved successfully", pkg);
-    } catch (error) {
-      return handleResponse(res, 500, "Failed to fetch package", {
-        error: error.message,
+    const pkg = await Package.findById(id)
+      .populate({
+        path: "services",
+        select: "_id name ",
+      })
+      .populate({
+        path: "department",
+        select: "_id name",
       });
-    }
-};
-  
 
-export const updatePackage = async (req, res) => {
+    if (!pkg) {
+      return handleResponse(res, 404, "Package not found");
+    }
+
+    return handleResponse(res, 200, "Package retrieved successfully", pkg);
+  } catch (error) {
+    return handleResponse(res, 500, "Failed to fetch package", {
+      error: error.message,
+    });
+  }
+};
+
+/* export const updatePackage = async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateObjectId(id, res, "package")) return;
+
 
     const updatedPackage = await Package.findByIdAndUpdate(id, req.body, {
       new: true,
@@ -224,15 +285,67 @@ export const updatePackage = async (req, res) => {
       error: error.message,
     });
   }
-};
+}; */
 
+export const updatePackage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const hospitalId = req.user._id;
+
+    if (!validateObjectId(id, res, "Package")) return;
+
+    const { name } = req.body;
+
+    if (name) {
+      const duplicate = await Package.findOne({
+        _id: { $ne: id },
+        hospital: hospitalId,
+        name: { $regex: `^${name}$`, $options: "i" },
+      });
+
+      if (duplicate) {
+        return handleResponse(
+          res,
+          400,
+          "A package with this name already exists for this hospital"
+        );
+      }
+    }
+
+    const updatedPackage = await Package.findOneAndUpdate(
+      { _id: id, hospital: hospitalId },
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedPackage) {
+      return handleResponse(res, 404, "Package not found");
+    }
+
+    return handleResponse(
+      res,
+      200,
+      "Package updated successfully",
+      updatedPackage
+    );
+  } catch (error) {
+    return handleResponse(res, 500, "Failed to update package", {
+      error: error.message,
+    });
+  }
+};
 
 export const deletePackage = async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateObjectId(id, res, "package")) return;
 
-    const deletedPackage = await Package.findByIdAndDelete(id);
+    const hospitalId = req.user._id;
+
+    const deletedPackage = await Package.findOneAndDelete({
+      _id: id,
+      hospital: hospitalId,
+    });
 
     if (!deletedPackage) {
       return handleResponse(res, 404, "Package not found");

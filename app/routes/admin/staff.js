@@ -1,7 +1,11 @@
 import express from "express";
 import { registerStaffSchema } from "../../validators/staffValidator.js";
 import { validate } from "../../middlewares/validate.js";
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
+import {
+  isAdmin,
+  isHospitalAdmin,
+  verifyToken,
+} from "../../middlewares/jwtAuth.js";
 import {
   deleteStaff,
   getAllStaff,
@@ -9,18 +13,16 @@ import {
   updateStaff,
   registerStaff,
 } from "../../controllers/admin/user/staff.js";
-import {
-  adminLogin,
-} from "../../controllers/user/userAuth.js";
+import { adminLogin } from "../../controllers/user/userAuth.js";
 
 const router = express.Router();
 
 const staffBase = "/staff";
 
+router.use(verifyToken, isHospitalAdmin);
+
 router.post(
   `/auth/staff/register`,
-  verifyToken,
-  isAdmin,
   validate(registerStaffSchema),
   registerStaff
 );

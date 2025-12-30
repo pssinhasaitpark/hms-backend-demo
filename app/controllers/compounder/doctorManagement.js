@@ -31,7 +31,8 @@ const DAY_SHORT = {
 
 export const getAssignedDoctors = async (req, res) => {
   try {
-    const compounderId = req.user?.compounderId;
+    const compounderId = req.user?._id;
+    const hospitalId = req.user.hospitalId;
 
     if (!compounderId) {
       return handleResponse(res, 400, "Compounder ID not found in user data");
@@ -40,17 +41,21 @@ export const getAssignedDoctors = async (req, res) => {
     const { page, limit, skip } = getPagination(req);
     const { search } = req.query;
 
-   
-    const compounder = await Compounder.findOne({ compounderId })
+    const compounder = await Compounder.findOne({
+      _id:compounderId,
+      hospital: hospitalId,
+    })
       .populate({
         path: "doctors",
+        match: { hospital: hospitalId },
         select: "-password",
         populate: {
           path: "department",
           select: "name",
         },
       })
-      .lean(); 
+      .lean();
+    
 
     if (!compounder) {
       return handleResponse(res, 404, "Compounder not found");
@@ -76,7 +81,6 @@ export const getAssignedDoctors = async (req, res) => {
 
     const totalPages = Math.ceil(totalDoctors / limit);
 
-  
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -85,7 +89,6 @@ export const getAssignedDoctors = async (req, res) => {
 
     const doctorsWithDetails = await Promise.all(
       paginatedDoctors.map(async (doctor) => {
- 
         const checkRecords = await CheckInCheckout.find({ doctor: doctor._id })
           .sort({ checkInTime: -1 })
           .lean();
@@ -97,7 +100,6 @@ export const getAssignedDoctors = async (req, res) => {
             (rec, index) => index !== 0 && rec.status === "CheckedOut"
           ) || null;
 
-  
         const availabilityDocs = await DoctorAvailability.find({
           doctor: doctor._id,
         }).lean();
@@ -112,7 +114,6 @@ export const getAssignedDoctors = async (req, res) => {
             shifts: a.shifts,
           }));
 
-       
         const patientCountToday = await PatientVisitRecords.countDocuments({
           doctor: doctor._id,
           visitDate: {
@@ -161,11 +162,11 @@ export const getAssignedDoctors = async (req, res) => {
   }
 };
 
-
 export const getPatientsByDoctorAndDate = async (req, res) => {
   try {
     const { doctorId, date, search } = req.query;
-
+    
+    const hospitalId = req.user.hospitalId;
     if (!doctorId || !date) {
       return handleResponse(res, 400, "Doctor ID and date are required");
     }
@@ -176,6 +177,7 @@ export const getPatientsByDoctorAndDate = async (req, res) => {
     // Filter query for patient visits
     let filterQuery = {
       doctor: doctorId,
+      hospital: hospitalId,
       visitDate: {
         $gte: formattedDate,
         $lt: moment(formattedDate).endOf("day").toDate(),
@@ -281,12 +283,15 @@ export const getPatientsByDoctorAndDate = async (req, res) => {
 export const getPatientDetails = async (req, res) => {
   try {
     const { patientId } = req.params;
-
+    const hospitalId = req.user.hospitalId;
     if (!patientId) {
       return handleResponse(res, 400, "Patient ID is required");
     }
 
-    const patientVisit = await PatientVisitRecords.findOne({ _id: patientId })
+    const patientVisit = await PatientVisitRecords.findOne({
+      _id: patientId,
+      hospital: hospitalId,
+    })
       .populate("doctor", "doctorName")
       .populate("department", "name")
       .populate("patient", "patientName mobile patientId address gender age")
@@ -337,8 +342,12 @@ export const checkInDoctor = async (req, res) => {
   try {
     const doctorId = req.params.doctorId;
     const compounderId = req.user._id;
+    const hospitalId = req.user.hospitalId;
 
-    const doctor = await Doctor.findById(doctorId);
+    const doctor = await Doctor.findOne({
+      _id: doctorId,
+      hospital: hospitalId,
+    });
     if (!doctor) {
       return handleResponse(res, 404, "Doctor not found");
     }
@@ -382,8 +391,12 @@ export const checkOutDoctor = async (req, res) => {
   try {
     const doctorId = req.params.doctorId;
     const compounderId = req.user._id;
+    const hospitalId = req.user.hospitalId;
 
-    const doctor = await Doctor.findById(doctorId);
+    const doctor = await Doctor.findOne({
+      _id: doctorId,
+      hospital: hospitalId,
+    });
     if (!doctor) {
       return handleResponse(res, 404, "Doctor not found");
     }
@@ -427,7 +440,6 @@ export const checkOutDoctor = async (req, res) => {
   }
 };
 
-
 export const getCompounderAssignedPatients = async (req, res) => {
   try {
     const compounderId = req.user?._id;
@@ -437,6 +449,7 @@ export const getCompounderAssignedPatients = async (req, res) => {
 
     const { date, search } = req.query;
 
+    const hospitalId = req.user.hospitalId;
     if (!date) return handleResponse(res, 400, "Date is required");
 
     const { page, limit, skip } = getPagination(req);
@@ -455,6 +468,7 @@ export const getCompounderAssignedPatients = async (req, res) => {
 
     let filterQuery = {
       doctor: { $in: doctorIds },
+      hospital: hospitalId,
       visitDate: {
         $gte: formattedDate,
         $lt: moment(formattedDate).endOf("day").toDate(),

@@ -1,7 +1,5 @@
 import AccountDailySummary from "../models/frontdesk/accountDailySummary.js";
 
-
-
 // export const updateAccountDailySummary = async (
 //   frontdeskId,
 
@@ -86,8 +84,6 @@ import AccountDailySummary from "../models/frontdesk/accountDailySummary.js";
 //   return summary;
 // };
 
-
-
 export const updateAccountDailySummary = async (
   frontdeskId,
 
@@ -98,7 +94,9 @@ export const updateAccountDailySummary = async (
   guestOnline = 0,
 
   canteenCash = 0,
-  canteenOnline = 0
+  canteenOnline = 0,
+
+  hospitalId
 ) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -111,13 +109,19 @@ export const updateAccountDailySummary = async (
 
   let summary = await AccountDailySummary.findOne({
     frontdesk: frontdeskId,
+    hospital: hospitalId,
     date: today,
   }).sort({ createdAt: -1 });
 
   // Create new summary if not exist or submitted
-  if (!summary || summary.transactionStatus === "submitted" || summary.transactionStatus === "received") {
+  if (
+    !summary ||
+    summary.transactionStatus === "submitted" ||
+    summary.transactionStatus === "received"
+  ) {
     summary = new AccountDailySummary({
       frontdesk: frontdeskId,
+      hospital: hospitalId, 
       date: today,
 
       totalAmount,

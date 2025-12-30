@@ -83,7 +83,7 @@ export const createHospital = async (req, res) => {
   }
 };
 
-export const hospitalLogin = async (req, res) => {
+/* export const hospitalLogin = async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
@@ -91,9 +91,10 @@ export const hospitalLogin = async (req, res) => {
       return handleResponse(res, 400, "Identifier and password are required");
     }
 
-    const hospital = await Hospital.findOne({ email: identifier }).select(
-      "+password +role"
-    );
+    const hospital = await Hospital.findOne({
+      email: identifier,
+      password: password,
+    }).select("+password +role");
 
     if (!hospital) {
       return handleResponse(res, 401, "Invalid email or password");
@@ -123,8 +124,55 @@ export const hospitalLogin = async (req, res) => {
     return handleResponse(res, 500, error.message);
   }
 };
+ */
 
-export const getHospitals = async (req, res) => {
+export const hospitalLogin = async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+
+    if (!identifier || !password) {
+      return handleResponse(res, 400, "Identifier and password are required");
+    }
+
+    const hospital = await Hospital.findOne({
+      $or: [{ email: identifier }],
+    }).select("+password +role");
+
+    if (!hospital) {
+      return handleResponse(res, 401, "Invalid email or password");
+    }
+
+    const isMatch = await hospital.comparePassword(password);
+    if (!isMatch) {
+      return handleResponse(res, 401, "Invalid email or password");
+    }
+
+    const token = generateToken(hospital.id, hospital.role);
+
+    const safeHospital = {
+      id: hospital._id,
+      hospital_name: hospital.hospital_name,
+      email: hospital.email,
+      hospital_type: hospital.hospital_type,
+      address: hospital.address,
+      contact_number: hospital.contact_number,
+      contact_person: hospital.contact_person,
+      subscription_type: hospital.subscription_type,
+      valid_upto: hospital.valid_upto,
+      role: hospital.role,
+    };
+
+    return handleResponse(res, 200, "Hospital login successful", {
+      token,
+      hospital: safeHospital,
+    });
+  } catch (error) {
+    console.error(error);
+    return handleResponse(res, 500, error.message);
+  }
+};
+
+/* export const getHospitals = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
     const [hospitals, total] = await Promise.all([
@@ -149,6 +197,49 @@ export const getHospitals = async (req, res) => {
     return handleResponse(res, 500, error.message);
   }
 };
+ */
+
+export const getHospitals = async (req, res) => {
+  try {
+    const { page, limit, skip } = getPagination(req);
+    const { search } = req.query; 
+
+
+    let filter = {};
+    if (search) {
+      filter = {
+        $or: [
+          { hospital_name: { $regex: search, $options: "i" } },
+          { address: { $regex: search, $options: "i" } },
+          { contact_person: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+
+    const [hospitals, total] = await Promise.all([
+      Hospital.find(filter)
+        .select("-password -plain_password -role")
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 }),
+      Hospital.countDocuments(filter),
+    ]);
+
+    const response = getPaginatedResponse(
+      hospitals,
+      total,
+      page,
+      limit,
+      "hospitals"
+    );
+
+    return handleResponse(res, 200, "Hospitals fetched successfully", response);
+  } catch (error) {
+    return handleResponse(res, 500, error.message);
+  }
+};
+
 
 export const getHospitalById = async (req, res) => {
   try {

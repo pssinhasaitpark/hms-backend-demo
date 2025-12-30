@@ -53,6 +53,11 @@ const issuedTokenFields = {
     required: true,
     enum: ["cash", "online"],
   },
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true, 
+  },
 };
 
 const issuedTokenSchema = createSchema(issuedTokenFields, {}, true);

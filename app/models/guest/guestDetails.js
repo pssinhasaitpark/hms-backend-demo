@@ -78,7 +78,13 @@ const guestFields = {
 
   checkoutTime: { type: Date },
   checkinTime: { type: Date },
-  uploadedFiles: [String], 
+  uploadedFiles: [String],
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+    index: true,
+  },
 };
 
 const guestSchema = createSchema(guestFields, {}, true);

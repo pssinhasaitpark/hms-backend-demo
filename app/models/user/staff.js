@@ -11,6 +11,13 @@ const staffFields = {
   role: { type: mongoose.Schema.Types.ObjectId, ref: "Role", required: true },
   staffId: { type: String, unique: true, trim: true },
 
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+    index: true,
+  },
+
   lastLogin: { type: Date },
 
   weekOffDay: {

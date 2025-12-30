@@ -9,19 +9,21 @@ const registrationFeeFields = {
   },
   updatedBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Staff",
+    ref: "Hospital",
   },
   updatedAt: {
     type: Date,
     default: Date.now,
   },
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+    unique: true,
+  },
 };
 
-const registrationFeeSchema = createSchema(
-    registrationFeeFields,
-  {},
-  true
-);
+const registrationFeeSchema = createSchema(registrationFeeFields, {}, true);
 
 // old
 // registrationFeeSchema.pre("save", function () {
@@ -33,6 +35,5 @@ const registrationFeeSchema = createSchema(
 registrationFeeSchema.pre("save", async function () {
   this.updatedAt = Date.now();
 });
-
 
 export default mongoose.model("registrationFee", registrationFeeSchema);

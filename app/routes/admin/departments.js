@@ -6,21 +6,23 @@ import {
   updateDepartment,
   deleteDepartment,
   updateDepartmentStatus,
-  getDepartmentsWithDoctors
+  getDepartmentsWithDoctors,
 } from "../../controllers/admin/departments/departments.js";
 
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
+import {
+  isHospitalAdmin,
+  verifyToken,
+} from "../../middlewares/jwtAuth.js";
 
 const router = express.Router();
 
+router.use(verifyToken, isHospitalAdmin);
 
-router.use(verifyToken, isAdmin);
-
-router.post("/",  createDepartment);
-router.get("/doctors",  getDepartmentsWithDoctors);
-router.get("/",  getDepartments);
+router.post("/", createDepartment);
+router.get("/doctors", getDepartmentsWithDoctors);
+router.get("/", getDepartments);
 router.get("/:id", getDepartmentById);
-router.patch("/:id/status", updateDepartmentStatus );
+router.patch("/:id/status", updateDepartmentStatus);
 router.put("/:id", updateDepartment);
 router.delete("/:id", deleteDepartment);
 

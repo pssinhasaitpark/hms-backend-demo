@@ -14,7 +14,7 @@ const tokenTemplateFields = {
 
   validFrom: {
     type: String,
-    required: true, 
+    required: true,
   },
 
   validTo: {
@@ -25,8 +25,16 @@ const tokenTemplateFields = {
     type: String,
     default: null,
   },
+
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+    index: true,
+  },
 };
 
 const tokenTemplateSchema = createSchema(tokenTemplateFields, {}, true);
+tokenTemplateSchema.index({ hospital: 1, mealType: 1 }, { unique: true });
 
 export default mongoose.model("TokenTemplate", tokenTemplateSchema);

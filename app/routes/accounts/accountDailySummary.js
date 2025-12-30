@@ -29,7 +29,11 @@ router.get("/details", verifyToken, getAccountDetailsByFrontdesk);
 
 router.get("/cash-denomination/:summaryId", verifyToken, getCashDenomination);
 
-router.patch("/account-summary/:id/update-status", updateTransactionStatus);
+router.patch(
+  "/account-summary/:id/update-status",
+  verifyToken,
+  updateTransactionStatus
+);
 
 router.post("/cash", verifyToken, submitCashDenominations);
 

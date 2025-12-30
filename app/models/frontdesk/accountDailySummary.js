@@ -7,6 +7,11 @@ const accountDailySummaryFields = {
     ref: "Staff",
     required: true,
   },
+  hospital: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Hospital",
+    required: true,
+  },
   date: { type: Date, required: true },
 
   totalAmount: { type: Number, default: 0 },

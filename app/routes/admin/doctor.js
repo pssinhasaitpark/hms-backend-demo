@@ -7,16 +7,18 @@ import {
   updateDoctor,
   deleteDoctor,
 } from "../../controllers/admin/user/doctor.js";
-import { isAdmin, verifyToken } from "../../middlewares/jwtAuth.js";
+import {
+  isHospitalAdmin,
+  verifyToken,
+} from "../../middlewares/jwtAuth.js";
 import { registerDoctorSchema } from "../../validators/doctorValidator.js";
 import { validate } from "../../middlewares/validate.js";
 const router = express.Router();
-router.use(verifyToken, isAdmin);
+router.use(verifyToken, isHospitalAdmin);
 
 router.post("/register", validate(registerDoctorSchema), registerDoctor);
 
 router.post("/login", loginDoctor);
-
 
 router.get("/", getAllDoctors);
 router.get("/:id", getDoctorById);

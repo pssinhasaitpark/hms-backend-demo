@@ -6,17 +6,7 @@ import Compounder from "../models/user/compounder.js";
 import Admin from "../models/user/admin.js";
 import Hospital from "../models/hospitals/hospitals.js";
 
-/* export const generateToken = (
-  staffId,
-  roleName,
-  expiresIn = process.env.EXPIREIN || "1d"
-) => {
-  return jwt.sign(
-    { id: staffId, role: roleName },
-    process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn }
-  );
-}; */
+
 
 export const generateToken = (
   staffId,
@@ -113,8 +103,8 @@ export const verifyToken = async (req, res, next) => {
     const staffRoles = ["ADMIN", "FRONTDESK", "ACCOUNTS"];
 
     if (staffRoles.includes(role)) {
-      user = await Staff.findById(id).select("_id role");  
-      
+      user = await Staff.findById(id).select("_id role");
+
       if (user) {
         req.user = {
           _id: user._id.toString(),
@@ -146,7 +136,7 @@ export const verifyToken = async (req, res, next) => {
         req.user = {
           _id: user._id.toString(),
           role: "SUPER_ADMIN",
-          hospitalId: null, 
+          hospitalId: null,
         };
       }
     } else if (role === "hospital_admin") {
@@ -155,7 +145,16 @@ export const verifyToken = async (req, res, next) => {
         req.user = {
           _id: user._id.toString(),
           role: "hospital_admin",
-          hospitalId: user._id.toString(), // if needed, else keep null
+          hospitalId: user._id.toString(),
+        };
+      }
+    } else if (role === "NURSE") {
+      user = await Staff.findById(id).select("_id hospitalId");
+      if (user) {
+        req.user = {
+          _id: user._id.toString(),
+          role: "NURSE",
+          hospitalId: hospitalId,
         };
       }
     } else {
@@ -205,7 +204,6 @@ export const isFrontDesk = (req, res, next) => {
 export const isCompounder = (req, res, next) => {
   if (!req.user)
     return handleResponse(res, 401, "Unauthorized: User not found");
-
 
   if (req.user.role !== "COMPOUNDER") {
     return handleResponse(res, 403, "Access denied: Compounders only");

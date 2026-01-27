@@ -22,7 +22,7 @@ app.use(
       "https://madhav-admin.parkhya.co.in",
       "http://192.168.0.117:5173",
       "http://192.168.0.162:5173",
-      "http://192.168.0.146:5173",
+      "http://192.168.0.133:5173",
       "https://hms-admin-demo.vercel.app",
       "https://hms-super-admin.vercel.app",
       "https://hms-admin-demo-8aps.vercel.app",
@@ -44,21 +44,36 @@ app.use(bodyParser.json({ limit: "50mb" }));
 app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
 app.use(express.json());
 
-connectDB();
+await connectDB();
 mediaSetup(app);
 routes(app);
 
 app.get("/", (req, res) => {
   return res.status(200).send({
     error: false,
-    message: "Guruji Sewa Nyas Apis's",
+    message: "HMS Backend Apis's",
   });
 });
+
+// const startServer = async () => {
+//   try {
+//     await connectDB();
+//     mediaSetup(app);
+//     routes(app);
+
+//     app.listen(port, host, () => {
+//       console.log("🚀 Server Started Successfully");
+//       console.log(`App is listening at port: http://${host}:${port}`);
+//     });
+//   } catch (error) {
+//     console.error("❌ Server failed to start");
+//     console.error(error);
+//     process.exit(1);
+//   }
+// };
+
+// startServer();
 
 app.listen(port, host, () =>
   console.log(`App is listening at port: http://${host}:${port}`)
 );
-
-// app.listen(port,   () =>
-//   console.log(`App is listening at port: http://localhost:${port}`)
-// );

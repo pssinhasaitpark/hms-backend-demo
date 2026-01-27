@@ -21,7 +21,8 @@ export const createHospital = async (req, res) => {
     } = req.body;
 
     const logoFile = req.convertedFiles?.[0] || null;
-    const password = crypto.randomBytes(6).toString("hex");
+    // const password = crypto.randomBytes(6).toString("hex");
+    const password ="12345678"
 
     const hospital = await Hospital.create({
       hospital_name,
@@ -83,48 +84,6 @@ export const createHospital = async (req, res) => {
   }
 };
 
-/* export const hospitalLogin = async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-
-    if (!identifier || !password) {
-      return handleResponse(res, 400, "Identifier and password are required");
-    }
-
-    const hospital = await Hospital.findOne({
-      email: identifier,
-      password: password,
-    }).select("+password +role");
-
-    if (!hospital) {
-      return handleResponse(res, 401, "Invalid email or password");
-    }
-
-    const token = generateToken(hospital.id, hospital.role);
-
-    const safeHospital = {
-      id: hospital._id,
-      hospital_name: hospital.hospital_name,
-      email: hospital.email,
-      hospital_type: hospital.hospital_type,
-      address: hospital.address,
-      contact_number: hospital.contact_number,
-      contact_person: hospital.contact_person,
-      subscription_type: hospital.subscription_type,
-      valid_upto: hospital.valid_upto,
-      role: hospital.role,
-    };
-
-    return handleResponse(res, 200, "Hospital login successful", {
-      token,
-      hospital: safeHospital,
-    });
-  } catch (error) {
-    console.error(error);
-    return handleResponse(res, 500, error.message);
-  }
-};
- */
 
 export const hospitalLogin = async (req, res) => {
   try {
@@ -172,38 +131,11 @@ export const hospitalLogin = async (req, res) => {
   }
 };
 
-/* export const getHospitals = async (req, res) => {
-  try {
-    const { page, limit, skip } = getPagination(req);
-    const [hospitals, total] = await Promise.all([
-      Hospital.find()
-        .select("-password -plain_password -role")
-        .skip(skip)
-        .limit(limit)
-        .sort({ createdAt: -1 }),
-      Hospital.countDocuments(),
-    ]);
-
-    const response = getPaginatedResponse(
-      hospitals,
-      total,
-      page,
-      limit,
-      "hospitals"
-    );
-
-    return handleResponse(res, 200, "Hospitals fetched successfully", response);
-  } catch (error) {
-    return handleResponse(res, 500, error.message);
-  }
-};
- */
 
 export const getHospitals = async (req, res) => {
   try {
     const { page, limit, skip } = getPagination(req);
-    const { search } = req.query; 
-
+    const { search } = req.query;
 
     let filter = {};
     if (search) {
@@ -219,7 +151,7 @@ export const getHospitals = async (req, res) => {
 
     const [hospitals, total] = await Promise.all([
       Hospital.find(filter)
-        .select("-password -plain_password -role")
+        .select("-password -role")
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 }),
@@ -240,7 +172,6 @@ export const getHospitals = async (req, res) => {
   }
 };
 
-
 export const getHospitalById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -248,7 +179,7 @@ export const getHospitalById = async (req, res) => {
     if (!validateObjectId(id, res, "Hospital ID")) return;
 
     const hospital = await Hospital.findById(id).select(
-      "-password -plain_password"
+      "-password"
     );
 
     if (!hospital) {

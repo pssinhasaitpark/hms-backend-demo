@@ -17,6 +17,9 @@ import adminCompounderRoutes from "../routes/admin/compounder.js";
 import adminGuestRoomRoutes from "../routes/guest/guestRoom.js";
 import packageRoutes from "../routes/admin/package.js";
 import exportRoutes from "../routes/exporter/exporter.js";
+
+import ipdRegistrationFeeRoutes from "../routes/admin/ipdRegistrationFee.js";
+
 //compounder
 import compounderDoctorManagementRoutes from "../routes/compounder/doctorandpatientManagement.js";
 import prescriptionRoutes from "../routes/compounder/prescription.js";
@@ -32,6 +35,11 @@ import hospitalRoutes from "../routes/hospitals/hospitals.js";
 
 import contactRoutes from "../routes/contactus/constactus.js";
 
+import emrRoutes from "../routes/emr/emr.js";
+
+import ipdRoutes from "../routes/ipd/patientIpdAdmission.js";
+import wardRoutes from "../routes/ipd/ward.js";
+import billingRoutes from "../routes/ipd/billing.js"
 export default (app) => {
   app.use("/api/v1/auth", staffAuthPublicRoutes);
   //frontdesk
@@ -55,6 +63,7 @@ export default (app) => {
   app.use("/api/v1/admin/doctor", doctorRoutes);
   app.use("/api/v1/admin/opd-registration-fee", opdRegistrationFeeRoutes);
   app.use("/api/v1/admin/registration-fee", registrationFeeRoutes);
+  app.use("/api/v1/admin/ipd-registration-fee", ipdRegistrationFeeRoutes);
   app.use("/api/v1/admin/patients", adminPatienRoutes);
   app.use("/api/v1/admin/compounder", adminCompounderRoutes);
   app.use("/api/v1/admin/rooms", adminGuestRoomRoutes);
@@ -70,4 +79,9 @@ export default (app) => {
   app.use("/api/v1/hospital", hospitalRoutes);
 
   app.use("/api/v1/contact", contactRoutes);
+
+  app.use("/api/v1/emr", emrRoutes);
+  app.use("/api/v1/ipd", ipdRoutes);
+  app.use("/api/v1/ward", wardRoutes);
+  app.use("/api/v1/ipd/billing", billingRoutes);
 };

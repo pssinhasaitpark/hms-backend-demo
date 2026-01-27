@@ -65,7 +65,7 @@ const hospitalFields = {
   plain_password: {
     type: String,
     required: true,
-    select: false,
+    select: true,
   },
 
   role: {

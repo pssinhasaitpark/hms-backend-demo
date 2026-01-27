@@ -9,6 +9,8 @@ import {
   getTodayFrontdeskReport,
   getAllFees,
   getPrepaidPackagesByPatient,
+  getAllPatientVisits,
+  getPatientVisitById,
 } from "../../controllers/frontdesk/patients.js";
 import { isFrontDesk, verifyToken } from "../../middlewares/jwtAuth.js";
 import { getServices } from "../../controllers/admin/departments/services.js";
@@ -25,6 +27,9 @@ router.get(
   "/patients/prepaid-packages/:patientId",
   getPrepaidPackagesByPatient
 );
+router.get("/patients/visits", getAllPatientVisits);
+
+router.get("/patients/visits/:id", getPatientVisitById);
 
 router.get("/patients/visitis/:mobileId", getPatientVisitsByMobileId);
 
